@@ -3,6 +3,13 @@ import { config as defaultConfig } from './config.js';
 const BONDING = ['pumpfun', 'pump-fun'];
 export const isBondingCurve = (market) => BONDING.includes(market?.dex);
 
+// Share held by the 10 biggest holders, leaving out known accounts (pools, locks). null = unknown.
+export function top10Pct(report) {
+  if (!report?.topHolders) return null;
+  const known = new Set(report.knownAccounts);
+  return report.topHolders.filter((h) => !known.has(h.address) && !known.has(h.owner)).slice(0, 10).reduce((a, h) => a + h.pct, 0);
+}
+
 // Each rule returns 'veto', 'unknown' or null (pass).
 const rules = (c) => ({
   mint_authority: ({ report, mintInfo }) => authority('mintAuthority', report, mintInfo),
@@ -15,10 +22,8 @@ const rules = (c) => ({
     return report.lpLockedPct < c.veto.minLpLockedPct ? 'veto' : null;
   },
   top10: ({ report }) => {
-    if (!report?.topHolders) return 'unknown';
-    const known = new Set(report.knownAccounts);
-    const sum = report.topHolders.filter((h) => !known.has(h.address) && !known.has(h.owner)).slice(0, 10).reduce((a, h) => a + h.pct, 0);
-    return sum > c.veto.maxTop10Pct ? 'veto' : null;
+    const sum = top10Pct(report);
+    return sum === null ? 'unknown' : sum > c.veto.maxTop10Pct ? 'veto' : null;
   },
   insiders: ({ report, mintInfo }) => {
     if (!report) return 'unknown';
