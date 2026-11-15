@@ -9,6 +9,10 @@ export function storeSnapshots(db, rows, source, ts) {
   for (const r of rows) ins.run(ts, source, ...COLS.map((c) => r[c] ?? null));
 }
 
+// Latest SOL price seen on a SOL-quoted pool; other modules use it to value trades.
+export const last = { solUsd: null };
+const noteSol = (pools) => { const p = pools.find((x) => x.sol_usd); if (p) last.solUsd = p.sol_usd; };
+
 export const median = (xs) => {
   const v = xs.filter((x) => x !== null && x !== undefined).sort((a, b) => a - b);
   if (!v.length) return null;
@@ -25,6 +29,7 @@ export function upsertTokens(db, rows, ts) {
 export async function sampleNewPools({ db, get, now }) {
   const ts = Math.floor(now() / 1000);
   const pools = await newPools(get);
+  noteSol(pools);
   storeSnapshots(db, pools, 'new', ts);
   const times = pools.map((p) => p.created_at).filter((x) => x !== null);
   const span = times.length ? Math.max(...times) - Math.min(...times) : 0;
@@ -41,6 +46,7 @@ export async function sampleNewPools({ db, get, now }) {
 export async function snapTrending({ db, get, now }) {
   const ts = Math.floor(now() / 1000);
   const pools = await trendingPools(get);
+  noteSol(pools);
   storeSnapshots(db, pools, 'trending', ts);
   upsertTokens(db, pools, ts);
   return pools;

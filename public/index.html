@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheesequake</title>
+<style>
+:root { --bg:#f6f5f1; --fg:#1d1d1b; --mut:#6b6a63; --card:#fff; --line:#dedbd0; --acc:#c47f00; --good:#2b7a3d; --bad:#b3261e; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151513; --fg:#ecebe4; --mut:#9a988c; --card:#1f1f1c; --line:#33332e; --acc:#e8a317; --good:#5fc27a; --bad:#f2766d; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+header { padding:16px; border-bottom:1px solid var(--line); }
+h1 { margin:0; font-size:20px; }
+.note { color:var(--mut); font-size:13px; margin:2px 0 0; }
+nav { display:flex; gap:4px; padding:8px 16px 0; flex-wrap:wrap; }
+nav button { background:none; border:0; border-bottom:2px solid transparent; color:var(--mut); padding:8px 12px; font:inherit; cursor:pointer; }
+nav button[aria-selected="true"] { color:var(--fg); border-color:var(--acc); }
+main { padding:16px; max-width:1100px; }
+section[hidden] { display:none; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; overflow-x:auto; }
+h2 { font-size:15px; margin:0 0 8px; }
+table { border-collapse:collapse; width:100%; font-size:14px; }
+th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th { color:var(--mut); font-weight:500; }
+.big { font-size:44px; font-weight:600; line-height:1; }
+.zone { color:var(--acc); font-size:18px; margin-left:8px; }
+.mut { color:var(--mut); }
+input, select { font:inherit; padding:6px 8px; background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:6px; }
+input { width:min(100%, 420px); }
+button.go { font:inherit; padding:6px 12px; background:var(--acc); color:#111; border:0; border-radius:6px; cursor:pointer; }
+a { color:var(--acc); }
+svg { max-width:100%; height:auto; }
+.reasons { white-space:normal; color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cheesequake</h1>
+  <p class="note">Research tool. Not trading advice. Scores are untested defaults; it never trades.</p>
+</header>
+<nav role="tablist" id="tabs"></nav>
+<main>
+  <section id="market"></section>
+  <section id="ping" hidden></section>
+  <section id="narratives" hidden></section>
+  <section id="tracer" hidden></section>
+</main>
+<script>
+'use strict';
+// Every API value goes in through textContent; nothing here builds markup from strings.
+const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  for (const k of kids.flat()) if (k !== null && k !== undefined) el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return el;
+}
+function sv(tag, attrs, text) {
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+const short = (a) => (a ? a.slice(0, 4) + '…' + a.slice(-4) : '');
+const fmt = (n, d = 0) => (n === null || n === undefined ? 'unknown' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d }));
+const when = (ts) => new Date(ts * 1000).toLocaleString();
+const link = (a) => (B58.test(a || '') ? h('a', { href: 'https://solscan.io/account/' + a, target: '_blank', rel: 'noopener noreferrer' }, short(a)) : short(a));
+const card = (title, ...kids) => h('div', { class: 'card' }, h('h2', {}, title), ...kids);
+const table = (head, rows) => h('table', {}, h('thead', {}, h('tr', {}, head.map((x) => h('th', {}, x)))), h('tbody', {}, rows.map((r) => h('tr', {}, r.map((c) => h('td', {}, c))))));
+const get = async (p) => (await fetch(p)).json();
+const put = (id, ...kids) => document.getElementById(id).replaceChildren(...kids);
+
+async function market() {
+  const m = await get('/api/market');
+  const pts = m.hourly.filter((r) => r.index_value !== null);
+  let chart = h('p', { class: 'mut' }, 'Warming up: ' + m.hours + ' of ' + m.warmupHours + ' hours collected.');
+  if (m.index.value !== null && pts.length > 1) {
+    const W = 800, H = 220, t0 = pts[0].hour, t1 = pts[pts.length - 1].hour || 1;
+    const x = (t) => 30 + ((t - t0) / Math.max(1, t1 - t0)) * (W - 40);
+    const y = (v) => H - 20 - (v / 100) * (H - 40);
+    chart = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, role: 'img', 'aria-label': 'Trench index, last 30 days' });
+    for (const g of [0, 20, 40, 60, 80, 100]) {
+      chart.append(sv('line', { x1: 30, x2: W - 10, y1: y(g), y2: y(g), stroke: 'currentColor', 'stroke-opacity': 0.12 }));
+      chart.append(sv('text', { x: 2, y: y(g) + 4, 'font-size': 11, fill: 'currentColor' }, g));
+    }
+    chart.append(sv('polyline', { points: pts.map((r) => x(r.hour) + ',' + y(r.index_value)).join(' '), fill: 'none', stroke: '#c47f00', 'stroke-width': 2 }));
+  }
+  put('market',
+    card('Trench index', h('span', { class: 'big' }, m.index.value === null ? '--' : m.index.value), h('span', { class: 'zone' }, m.index.zone),
+      h('p', { class: 'note' }, 'Cold, Cool, Neutral, Hot, Euphoria. Percentile of five launch and trading measures against the last 30 days.')),
+    card('Last 30 days', chart));
+}
+
+let pingKind = '';
+async function ping() {
+  const d = await get('/api/ping' + (pingKind ? '?kind=' + encodeURIComponent(pingKind) : ''));
+  const sel = h('select', { 'aria-label': 'Alert kind' }, ['', 'buy', 'sell', 'consensus', 'exit'].map((k) => h('option', { value: k }, k || 'all')));
+  sel.value = pingKind;
+  sel.onchange = () => { pingKind = sel.value; ping(); };
+  put('ping', card('Wallet activity', sel, d.alerts.length ? table(['Time', 'Kind', 'Coin', 'Wallet', 'Detail'],
+    d.alerts.map((a) => [when(a.ts), a.kind, a.symbol ? a.symbol + ' ' : '', a.wallet ? link(a.wallet) : '', detail(a)].map((c, i) => (i === 2 ? [c, link(a.mint)] : c))))
+    : h('p', { class: 'mut' }, 'No alerts yet.')));
+}
+function detail(a) {
+  const d = a.detail || {};
+  if (a.kind === 'consensus') return (d.wallets || []).length + ' wallets, market cap ' + fmt(d.mcap);
+  if (d.usd !== undefined) return '$' + fmt(d.usd);
+  if (d.from !== undefined) return 'liquidity $' + fmt(d.from) + ' to $' + fmt(d.to);
+  return '';
+}
+
+async function narratives() {
+  const n = await get('/api/narratives');
+  const running = n.running.map((r) => {
+    const why = h('tr', { hidden: '' }, h('td', { colspan: 8, class: 'reasons' }, r.reasons.map((x) => x.part + ' ' + x.points + '/' + x.max + ': ' + x.note).join('  |  ')));
+    const btn = h('button', { class: 'go' }, 'Why');
+    btn.onclick = () => { why.hidden = !why.hidden; };
+    const row = h('tr', {}, [r.symbol || short(r.mint), r.theme || '', r.score, r.band, '$' + fmt(r.mcap_usd), '', r.unknowns.join(', ') || 'none', btn].map((c) => h('td', {}, c)));
+    row.children[0].replaceChildren(r.symbol ? r.symbol + ' ' : '', link(r.mint));
+    return [row, why];
+  });
+  const rt = h('table', {}, h('thead', {}, h('tr', {}, ['Coin', 'Theme', 'Score', 'Band', 'Market cap', '', 'Unknown', ''].map((x) => h('th', {}, x)))), h('tbody', {}, running.flat()));
+  put('narratives',
+    card('Themes this hour', n.themes.length ? table(['Keyword', 'Tokens', 'Volume 1h', 'Share'], n.themes.map((t) => [t.keyword, t.tokens, '$' + fmt(t.volume), fmt(t.share * 100, 1) + '%'])) : h('p', { class: 'mut' }, 'No themes yet.')),
+    card('Running now', n.running.length ? rt : h('p', { class: 'mut' }, 'Nothing has passed every veto in the last 30 minutes.')),
+    card('Best calls: wallet scorecard', n.wallets.length ? table(['Wallet', 'Class', 'Bought', 'Win rate', 'Median hold (s)', 'Still holding'],
+      n.wallets.map((w) => [w.label ? w.label + ' ' : '', w.class, w.bought, w.winRate === null ? 'unknown' : fmt(w.winRate * 100) + '%', fmt(w.medianHoldSeconds), w.stillHoldingShare === null ? 'unknown' : fmt(w.stillHoldingShare * 100) + '%']).map((r, i) => [[r[0], link(n.wallets[i].address)], ...r.slice(1)]))
+      : h('p', { class: 'mut' }, 'No wallets tracked. Add some to wallets.txt.')),
+    card('Calibration: later price by score band', n.calibration.rows.length ? table(['Band', 'Horizon', 'Count', 'Mean change', 'Share up'],
+      n.calibration.rows.map((r) => [r.band, r.horizon_h + ' h', r.count, fmt(r.meanChangePct, 1) + '%', fmt(r.positiveShare * 100) + '%'])) : h('p', { class: 'mut' }, 'No outcomes yet. Missed: ' + n.calibration.missed)));
+}
+
+const TYPE_COLOR = { exchange: '#2b7a3d', mixer: '#b3261e', other: '#c47f00' };
+let traceWallet = '';
+function tracerView(t) {
+  const out = [h('p', {}, 'Status: ' + t.status)];
+  if (t.nodes && t.nodes.length) {
+    const cols = {};
+    t.nodes.forEach((n) => (cols[n.depth] = cols[n.depth] || []).push(n));
+    const depth = Math.max(...Object.keys(cols).map(Number)) + 1;
+    const rows = Math.max(...Object.values(cols).map((c) => c.length));
+    const W = depth * 190 + 20, H = rows * 56 + 20;
+    const pos = {};
+    for (const [d, list] of Object.entries(cols)) list.forEach((n, i) => (pos[n.address] = { x: 10 + d * 190, y: 10 + i * 56 }));
+    const svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, role: 'img', 'aria-label': 'Fund flow' });
+    for (const e of t.edges) {
+      const a = pos[e.from], b = pos[e.to];
+      if (!a || !b) continue;
+      svg.append(sv('line', { x1: a.x + 150, y1: a.y + 20, x2: b.x, y2: b.y + 20, stroke: 'currentColor', 'stroke-opacity': 0.4 }));
+      svg.append(sv('text', { x: (a.x + 150 + b.x) / 2, y: (a.y + b.y) / 2 + 14, 'font-size': 10, fill: 'currentColor' }, '$' + fmt(e.usd)));
+    }
+    for (const n of t.nodes) {
+      const p = pos[n.address];
+      svg.append(sv('rect', { x: p.x, y: p.y, width: 150, height: 40, rx: 6, fill: 'none', stroke: TYPE_COLOR[n.type] || 'currentColor', 'stroke-width': n.type ? 2 : 1 }));
+      svg.append(sv('text', { x: p.x + 8, y: p.y + 17, 'font-size': 12, fill: 'currentColor' }, n.label || short(n.address)));
+      svg.append(sv('text', { x: p.x + 8, y: p.y + 32, 'font-size': 10, fill: 'currentColor', 'fill-opacity': 0.6 }, n.type ? n.type : short(n.address)));
+    }
+    out.push(svg);
+  }
+  return out;
+}
+async function tracer() {
+  const t = traceWallet ? await get('/api/tracer?wallet=' + encodeURIComponent(traceWallet)) : null;
+  const input = h('input', { placeholder: 'Start wallet address', 'aria-label': 'Start wallet address', value: traceWallet });
+  const go = h('button', { class: 'go' }, 'Trace');
+  const msg = h('p', { class: 'mut' }, 'Follows where the money went, hop by hop. Labelled destinations stop the trace; labels come from data/labels.json.');
+  go.onclick = () => { if (!B58.test(input.value.trim())) { msg.textContent = 'That is not a valid wallet address.'; return; } traceWallet = input.value.trim(); tracer(); };
+  put('tracer', card('Tracer', input, ' ', go, msg, t && t.error ? t.error : t ? tracerView(t) : null));
+}
+
+const TABS = { market, ping, narratives, tracer };
+let current = 'market';
+function show(name) {
+  current = name;
+  document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  for (const id of Object.keys(TABS)) document.getElementById(id).hidden = id !== name;
+  refresh();
+}
+const refresh = () => TABS[current]().catch((e) => put(current, h('p', { class: 'mut' }, 'Could not load: ' + e.message)));
+const nav = document.getElementById('tabs');
+for (const name of Object.keys(TABS)) {
+  const b = h('button', { role: 'tab', 'data-tab': name }, name[0].toUpperCase() + name.slice(1));
+  b.onclick = () => show(name);
+  nav.append(b);
+}
+show('market');
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>
