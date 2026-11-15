@@ -72,3 +72,7 @@ test('exit alerts: tracked sell, deployer sell, liquidity drop; deduped', () => 
   checkExits({ db, tracked: [trk], now });
   for (const k of ['exit_wallet', 'exit_deployer', 'exit_liquidity']) assert.equal(count(db, k), 1, k);
 });
+
+test('buys polled newest first still give exactly one consensus alert', async () => {
+  assert.equal(count(await scenario([300, 200, 100]), 'consensus'), 1);
+});

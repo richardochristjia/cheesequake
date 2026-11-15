@@ -50,7 +50,7 @@ export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligib
 export function checkConsensus({ db, mint, ts, tracked, eligible = () => true, config = defaultConfig }) {
   const win = config.consensus.windowMinutes * 60;
   const wallets = db.prepare(
-    "SELECT DISTINCT wallet FROM trades WHERE mint = ? AND side = 'buy' AND ts BETWEEN ? AND ?").all(mint, ts - win, ts)
+    "SELECT DISTINCT wallet FROM trades WHERE mint = ? AND side = 'buy' AND ts BETWEEN ? AND ?").all(mint, ts - win, ts + win)
     .map((r) => r.wallet).filter((w) => tracked.has(w) && eligible(w));
   if (wallets.length < config.consensus.wallets) return false;
   const exists = db.prepare("SELECT 1 FROM alerts WHERE kind = 'consensus' AND mint = ? AND ts > ?").get(mint, ts - win);
