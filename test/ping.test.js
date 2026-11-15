@@ -76,3 +76,7 @@ test('exit alerts: tracked sell, deployer sell, liquidity drop; deduped', () => 
 test('buys polled newest first still give exactly one consensus alert', async () => {
   assert.equal(count(await scenario([300, 200, 100]), 'consensus'), 1);
 });
+
+test('buys 100 minutes apart around a middle buy are not one consensus', async () => {
+  assert.equal(count(await scenario([1000, 1000 + 3000, 1000 + 6000]), 'consensus'), 0);
+});

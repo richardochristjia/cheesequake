@@ -49,9 +49,12 @@ export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligib
 // Fires once per mint per window when enough eligible tracked wallets bought it.
 export function checkConsensus({ db, mint, ts, tracked, eligible = () => true, config = defaultConfig }) {
   const win = config.consensus.windowMinutes * 60;
-  const wallets = db.prepare(
-    "SELECT DISTINCT wallet FROM trades WHERE mint = ? AND side = 'buy' AND ts BETWEEN ? AND ?").all(mint, ts - win, ts + win)
-    .map((r) => r.wallet).filter((w) => tracked.has(w) && eligible(w));
+  const buys = db.prepare(
+    "SELECT wallet, ts FROM trades WHERE mint = ? AND side = 'buy' AND ts BETWEEN ? AND ?").all(mint, ts - win, ts + win)
+    .filter((r) => tracked.has(r.wallet) && eligible(r.wallet));
+  // Any span of `win` seconds holding enough distinct wallets counts, so polling order does not matter.
+  const inSpan = (s) => [...new Set(buys.filter((r) => r.ts >= s && r.ts <= s + win).map((r) => r.wallet))];
+  const wallets = buys.map((r) => inSpan(r.ts)).sort((a, b) => b.length - a.length)[0] ?? [];
   if (wallets.length < config.consensus.wallets) return false;
   const exists = db.prepare("SELECT 1 FROM alerts WHERE kind = 'consensus' AND mint = ? AND ts > ?").get(mint, ts - win);
   if (exists) return false;
