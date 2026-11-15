@@ -45,8 +45,8 @@ export function createServer({ db, config, tracer, wallets = () => [], now = Dat
       res.end(type === 'application/json' ? JSON.stringify(body) : body);
     };
     if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
-    const url = new URL(req.url, 'http://127.0.0.1');
     try {
+      const url = new URL(req.url, 'http://127.0.0.1');
       if (url.pathname === '/') return send(200, readFileSync(PAGE, 'utf8'), 'text/html');
       const h = Object.hasOwn(api, url.pathname) && api[url.pathname];
       if (!h) return send(404, { error: 'not found' });

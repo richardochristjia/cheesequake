@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import net from 'node:net';
 import { openDb } from '../src/db.js';
 import { config } from '../src/config.js';
 import { startServer } from '../src/server.js';
@@ -56,5 +57,24 @@ test('hostile token name travels as JSON and the page never assigns markup', asy
     assert.equal(n.running[0].name, HOSTILE);
     const src = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(src));
+  } finally { server.close(); server.closeAllConnections(); }
+});
+
+// Raw request, since fetch normalises URLs.
+function raw(port, head) {
+  return new Promise((resolve, reject) => {
+    let out = '';
+    const sock = net.connect(port, '127.0.0.1', () => sock.write(head));
+    sock.setTimeout(2000, () => { sock.destroy(); resolve(out); });
+    sock.on('data', (d) => { out += d; }).on('end', () => resolve(out)).on('error', reject);
+  });
+}
+
+test('a malformed request line gets an error reply and the server stays up', async () => {
+  const { server, base } = await boot();
+  try {
+    const res = await raw(server.address().port, 'GET //[ HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n');
+    assert.match(res, /^HTTP\/1\.1 5\d\d/);
+    assert.equal((await fetch(base + '/api/market')).status, 200);
   } finally { server.close(); server.closeAllConnections(); }
 });
