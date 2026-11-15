@@ -68,7 +68,9 @@ const running = new Map();
 export function startTrace({ db, rpc, labels, solUsd, now, start, config = defaultConfig }) {
   const nowS = Math.floor(now() / 1000);
   const row = db.prepare('SELECT ts, status FROM trace_cache WHERE start = ?').get(start);
-  if (row && (row.status === 'running' || nowS - row.ts < config.tracer.cacheHours * 3600)) return { status: row.status };
+  if (running.has(start)) return { status: 'running' };
+  // A stored 'running' row with no live run was cut off by a restart, so it is not a cache hit.
+  if (row && row.status !== 'running' && nowS - row.ts < config.tracer.cacheHours * 3600) return { status: row.status };
   db.prepare("INSERT OR REPLACE INTO trace_cache(start, ts, status, json) VALUES (?,?,'running','{}')").run(start, nowS);
   const run = runTrace({ rpc, start, labels, solUsd, config }).then((r) => {
     db.prepare('INSERT OR REPLACE INTO trace_cache(start, ts, status, json) VALUES (?,?,?,?)').run(start, nowS, r.status, JSON.stringify(r));

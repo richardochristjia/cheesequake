@@ -48,3 +48,13 @@ test('source failure gives a partial result; result is cached', async () => {
   assert.equal(getTrace(db, W[0]).status, 'partial');
   assert.equal(startTrace({ db, rpc, labels: new Map(), solUsd: 100, now: () => 1e12 + 1000, start: W[0] }).run, undefined);
 });
+
+test('a running row left by a restart does not block a new trace', async () => {
+  const db = openDb(':memory:');
+  db.prepare("INSERT INTO trace_cache(start, ts, status, json) VALUES (?,?,'running','{}')").run(W[1], 1e9 - 60);
+  const rpc = { signatures: async () => [], transaction: async () => null };
+  const r = startTrace({ db, rpc, labels: new Map(), solUsd: 100, now: () => 1e12, start: W[1] });
+  assert.ok(r.run);
+  await r.run;
+  assert.equal(getTrace(db, W[1]).status, 'done');
+});
