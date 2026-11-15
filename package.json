@@ -1,0 +1,10 @@
+{
+  "name": "cheesequake",
+  "version": "0.1.0",
+  "description": "Local Solana memecoin scanner with a dashboard",
+  "type": "module",
+  "bin": { "cheesequake": "src/main.js" },
+  "scripts": { "start": "node src/main.js", "test": "node --test" },
+  "engines": { "node": ">=22.13" },
+  "license": "MIT"
+}

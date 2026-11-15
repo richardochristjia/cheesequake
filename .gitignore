@@ -1,0 +1,4 @@
+data/*.db*
+wallets.txt
+.lavish/
+node_modules/
