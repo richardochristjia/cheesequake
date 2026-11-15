@@ -1,11 +1,6 @@
 import { config as defaultConfig } from './config.js';
+import { median } from './market.js';
 
-const median = (xs) => {
-  if (!xs.length) return null;
-  const v = [...xs].sort((a, b) => a - b);
-  const m = v.length >> 1;
-  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
-};
 const sum = (xs, k) => xs.reduce((a, x) => a + (x[k] ?? 0), 0);
 
 // trades: rows of one wallet {mint, side, token_amount, quote_usd, ts}.

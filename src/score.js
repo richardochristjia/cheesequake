@@ -6,6 +6,7 @@ import { tokenBatch, boosts, profiles } from './sources/dexscreener.js';
 import { poolsMulti } from './sources/geckoterminal.js';
 import { fetchReport } from './sources/rugcheck.js';
 import { scheduleOutcomes } from './outcomes.js';
+import { storeSnapshots, upsertTokens } from './market.js';
 
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const div = (a, b) => (a == null || b == null || b === 0 ? null : a / b);
@@ -69,8 +70,6 @@ function walletFacts(db, mint, tracked, nowS, config) {
   return { q, consensus: has('consensus'), deployerExit: has('exit_deployer') };
 }
 
-const SNAP = ['pool', 'mint', 'symbol', 'name', 'dex', 'created_at', 'price_usd', 'fdv_usd', 'mcap_usd', 'liquidity_usd', 'vol_h1', 'vol_h6', 'vol_h24', 'buys_h1', 'sells_h1', 'buyers_h1', 'buyers_h6', 'chg_h1'];
-
 function saveCandidate(db, ts, mint, m, { score, band, listed, vetoes, reasons = [], unknowns = [] }) {
   const id = db.prepare('INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .run(ts, mint, score, band, listed, JSON.stringify(vetoes), JSON.stringify(reasons), JSON.stringify(unknowns), m.price_usd ?? null, m.mcap_usd ?? null).lastInsertRowid;
@@ -108,14 +107,13 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     const pools = await safe(() => poolsMulti(deps.geckoGet, missing.slice(i, i + 30).map((m) => m.pool)), []);
     for (const p of pools) if (p.mint && p.buyers_h1 != null) buyersOf.set(p.mint, p);
   }
-  const insSnap = db.prepare(`INSERT INTO pool_snapshots(ts, source, ${SNAP.join(',')}) VALUES (?,?,${SNAP.map(() => '?').join(',')})`);
   for (const [mint, m] of markets) {
     const b = buyersOf.get(mint);
     m.buyers_h1 = b?.buyers_h1 ?? null;
     m.buyers_h6 = b?.buyers_h6 ?? null;
-    insSnap.run(nowS, 'candidate', ...SNAP.map((c) => m[c] ?? null));
     if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen) VALUES (?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description').run(mint, m.symbol, m.name, descOf.get(mint), nowS);
   }
+  storeSnapshots(db, [...markets.values()], 'candidate', nowS);
 
   const out = [];
   for (const [mint, m] of markets) {
@@ -125,10 +123,11 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 
     // 5. Report (reused when under 10 minutes old) and mint info.
     const stored = db.prepare('SELECT ts, json FROM reports WHERE mint = ?').get(mint);
-    let report = stored && nowS - stored.ts < 600 ? JSON.parse(stored.json) : await safe(() => fetchReport(deps.rugGet, mint), null);
-    if (report && !(stored && nowS - stored.ts < 600)) db.prepare('INSERT OR REPLACE INTO reports(mint, ts, json) VALUES (?,?,?)').run(mint, nowS, JSON.stringify(report));
+    const fresh = stored && nowS - stored.ts < 600;
+    const report = fresh ? JSON.parse(stored.json) : await safe(() => fetchReport(deps.rugGet, mint), null);
+    if (report && !fresh) db.prepare('INSERT OR REPLACE INTO reports(mint, ts, json) VALUES (?,?,?)').run(mint, nowS, JSON.stringify(report));
     const mintInfo = await safe(() => deps.rpc.mintInfo(mint), null);
-    db.prepare('INSERT INTO tokens(mint, symbol, name, first_seen) VALUES (?,?,?,?) ON CONFLICT(mint) DO NOTHING').run(mint, m.symbol, m.name, nowS);
+    upsertTokens(db, [m], nowS);
     if (report?.creator) db.prepare('UPDATE tokens SET creator = ? WHERE mint = ?').run(report.creator, mint);
 
     // 6. Remaining vetoes.
