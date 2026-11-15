@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { config as defaultConfig } from './config.js';
-import { tokenDeltas, WSOL, USDC, USDT } from './trades.js';
+import { tokenDeltas, key, WSOL, USDC, USDT } from './trades.js';
 
 export function loadLabels(path) {
   try {
@@ -12,7 +12,7 @@ export function loadLabels(path) {
 function usdDeltas(tx, solUsd) {
   const out = new Map();
   const add = (a, v) => out.set(a, (out.get(a) ?? 0) + v);
-  const keys = tx.transaction.message.accountKeys.map((k) => (typeof k === 'string' ? k : k.pubkey));
+  const keys = tx.transaction.message.accountKeys.map(key);
   keys.forEach((k, i) => add(k, ((tx.meta.postBalances[i] - tx.meta.preBalances[i]) / 1e9) * solUsd));
   const owners = new Set([...(tx.meta.preTokenBalances ?? []), ...(tx.meta.postTokenBalances ?? [])].map((e) => e.owner));
   for (const o of owners) {

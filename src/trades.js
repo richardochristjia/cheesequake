@@ -2,7 +2,7 @@ export const WSOL = 'So11111111111111111111111111111111111111112';
 export const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 export const USDT = 'Es9vMFrzaCERmJfrF4H2FYD4KNYQNR4KSB7QQ3xAPbmN';
 
-const key = (k) => (typeof k === 'string' ? k : k.pubkey);
+export const key = (k) => (typeof k === 'string' ? k : k.pubkey);
 
 // Token balance change per mint for one owner (missing entry counts as 0).
 export function tokenDeltas(meta, owner) {
