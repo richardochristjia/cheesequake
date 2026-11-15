@@ -149,12 +149,13 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   return out;
 }
 
-// Latest listed row per mint from the last 30 minutes, best score first.
+// Latest row per mint from the last 30 minutes, kept only if listed, best score first.
 export function runningNow(db, now) {
   const since = Math.floor(now / 1000) - 1800;
   return db.prepare(
     `SELECT c.*, t.symbol, t.name, tt.keyword AS theme FROM candidates c
-     JOIN (SELECT mint, MAX(id) id FROM candidates WHERE listed = 1 AND ts > ? GROUP BY mint) l ON l.id = c.id
+     JOIN (SELECT mint, MAX(id) id FROM candidates WHERE ts > ? GROUP BY mint) l ON l.id = c.id
      LEFT JOIN tokens t ON t.mint = c.mint LEFT JOIN token_theme tt ON tt.mint = c.mint
+     WHERE c.listed = 1
      ORDER BY c.score DESC`).all(since).map((r) => ({ ...r, reasons: JSON.parse(r.reasons), unknowns: JSON.parse(r.unknowns), vetoes: JSON.parse(r.vetoes) }));
 }

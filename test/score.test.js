@@ -86,3 +86,11 @@ test('boost and profile descriptions are stored on the token', async () => {
   await runCandidates({ db, deps, now: () => NOW });
   assert.equal(db.prepare('SELECT description FROM tokens WHERE mint = ?').get(MINT).description, 'frog on a log');
 });
+
+test('a newer vetoed row hides an earlier listed row from Running now', () => {
+  const db = openDb(':memory:');
+  const ins = db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns) VALUES (?,?,?,?,?,?,'[]','[]')");
+  ins.run(NOWS - 120, MINT, 70, 'good', 1, '[]');
+  ins.run(NOWS - 60, MINT, 0, 'avoid', 0, '["mint_authority"]');
+  assert.deepEqual(runningNow(db, NOW), []);
+});
