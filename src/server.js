@@ -44,6 +44,8 @@ export function createServer({ db, config, tracer, wallets = () => [], now = Dat
       res.writeHead(code, { 'content-type': `${type}; charset=utf-8`, 'x-content-type-options': 'nosniff' });
       res.end(type === 'application/json' ? JSON.stringify(body) : body);
     };
+    // Blocks DNS rebinding: a hostile page that rebinds its name to 127.0.0.1 still sends its own Host.
+    if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '')) return send(403, { error: 'forbidden host' });
     if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
     try {
       const url = new URL(req.url, 'http://127.0.0.1');

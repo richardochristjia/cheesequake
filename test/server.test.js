@@ -78,3 +78,13 @@ test('a malformed request line gets an error reply and the server stays up', asy
     assert.equal((await fetch(base + '/api/market')).status, 200);
   } finally { server.close(); server.closeAllConnections(); }
 });
+
+test('a foreign Host header gets 403, a loopback one gets 200', async () => {
+  const { server } = await boot();
+  const port = server.address().port;
+  const get = (host) => raw(port, `GET /api/market HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+  try {
+    assert.match(await get('evil.example'), /^HTTP\/1\.1 403/);
+    assert.match(await get(`127.0.0.1:${port}`), /^HTTP\/1\.1 200/);
+  } finally { server.close(); server.closeAllConnections(); }
+});
