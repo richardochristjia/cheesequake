@@ -88,7 +88,9 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     `SELECT DISTINCT mint FROM trades WHERE side = 'buy' AND ts > ? AND wallet IN (${tracked.map(() => '?').join(',')})`).all(nowS - 86400, ...tracked).map((r) => r.mint) : [];
   const tsT = db.prepare("SELECT MAX(ts) t FROM pool_snapshots WHERE source = 'trending'").get().t;
   const trending = tsT ? db.prepare("SELECT mint FROM pool_snapshots WHERE source = 'trending' AND ts = ?").all(tsT).map((r) => r.mint) : [];
-  const extra = [...(await safe(() => boosts(deps.dexGet), [])), ...(await safe(() => profiles(deps.dexGet), []))].map((x) => x.mint);
+  const listings = [...(await safe(() => boosts(deps.dexGet), [])), ...(await safe(() => profiles(deps.dexGet), []))];
+  const extra = listings.map((x) => x.mint);
+  const descOf = new Map(listings.filter((x) => x.description).map((x) => [x.mint, x.description]));
   const universe = [...new Set([...tr, ...trending, ...extra])].filter(Boolean).slice(0, 60);
   if (!universe.length) return [];
 
@@ -112,6 +114,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     m.buyers_h1 = b?.buyers_h1 ?? null;
     m.buyers_h6 = b?.buyers_h6 ?? null;
     insSnap.run(nowS, 'candidate', ...SNAP.map((c) => m[c] ?? null));
+    if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen) VALUES (?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description').run(mint, m.symbol, m.name, descOf.get(mint), nowS);
   }
 
   const out = [];

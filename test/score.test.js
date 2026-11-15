@@ -78,3 +78,11 @@ test('RugCheck outage: unknowns listed, score at most 79, no crash', async () =>
   assert.ok(r.unknowns.includes('top10'));
   assert.ok(r.score <= 79);
 });
+
+test('boost and profile descriptions are stored on the token', async () => {
+  const { db, deps } = setup({ rug: goodRaw(), mintInfo: info });
+  const base = deps.dexGet;
+  deps.dexGet = async (url) => url.includes('token-boosts') ? [{ chainId: 'solana', tokenAddress: MINT, description: 'frog on a log' }] : base(url);
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.equal(db.prepare('SELECT description FROM tokens WHERE mint = ?').get(MINT).description, 'frog on a log');
+});
