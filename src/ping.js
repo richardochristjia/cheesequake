@@ -1,4 +1,5 @@
 import { classify } from './trades.js';
+import { scorecardFor } from './scorecard.js';
 import { config as defaultConfig } from './config.js';
 
 export function insertAlert(db, { ts, kind, mint = null, wallet = null, detail = {}, dedupe }) {
@@ -9,7 +10,7 @@ export function insertAlert(db, { ts, kind, mint = null, wallet = null, detail =
 const MAX_NULL_CYCLES = 3;
 
 // One wallet, one cycle. Returns the trades recorded. No backfill: first sight only sets the cursor.
-export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligible = () => true, config = defaultConfig }) {
+export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligible = (w) => scorecardFor(db, w, config).class !== 'sniper', config = defaultConfig }) {
   const cur = db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(wallet)?.last_sig;
   const setCursor = db.prepare('INSERT INTO wallet_cursor(address, last_sig) VALUES (?,?) ON CONFLICT(address) DO UPDATE SET last_sig = excluded.last_sig');
   if (!cur) {
@@ -67,5 +68,43 @@ export async function runWalletCycle({ db, rpc, tracked, deployers = [], solUsd,
     } catch (e) {
       console.error(`ping: ${wallet.slice(0, 6)}… ${e.message}`);
     }
+  }
+  try { checkExits({ db, tracked, now: now(), config }); } catch (e) { console.error(`ping: exits ${e.message}`); }
+}
+
+// Deployers of the 20 best candidates listed in the last 24 h (watched for their own sells).
+export function deployerWallets(db, now) {
+  return db.prepare(
+    `SELECT t.creator FROM candidates c JOIN tokens t ON t.mint = c.mint
+     WHERE c.listed = 1 AND c.ts > ? AND t.creator IS NOT NULL
+     GROUP BY c.mint ORDER BY MAX(c.score) DESC LIMIT 20`).all(Math.floor(now / 1000) - 86400).map((r) => r.creator);
+}
+
+// Exit alerts for mints listed in the last 24 h. Deduped per kind, mint, wallet and hour.
+export function checkExits({ db, tracked, now, config = defaultConfig }) {
+  const nowS = Math.floor(now / 1000);
+  const mints = db.prepare(
+    `SELECT DISTINCT c.mint, t.creator FROM candidates c LEFT JOIN tokens t ON t.mint = c.mint WHERE c.listed = 1 AND c.ts > ?`).all(nowS - 86400);
+  const trackedSet = new Set(tracked);
+  const fire = (kind, mint, wallet, ts, detail) =>
+    insertAlert(db, { ts, kind, mint, wallet, detail, dedupe: `${kind}:${mint}:${wallet ?? ''}:${Math.floor(ts / 3600)}` });
+  const trades = db.prepare("SELECT wallet, side, ts, quote_usd FROM trades WHERE mint = ? AND side IN ('sell','out')");
+  const snaps = db.prepare('SELECT ts, liquidity_usd, vol_h1, buyers_h1 FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC');
+  for (const { mint, creator } of mints) {
+    for (const t of trades.all(mint)) {
+      if (t.wallet === creator) fire('exit_deployer', mint, t.wallet, t.ts, { side: t.side });
+      else if (t.side === 'sell' && trackedSet.has(t.wallet)) fire('exit_wallet', mint, t.wallet, t.ts, { usd: t.quote_usd });
+    }
+    const all = snaps.all(mint);
+    const latest = all[0];
+    if (!latest) continue;
+    const before = all.slice(1).filter((s) => s.ts <= latest.ts - 1800)
+      .sort((a, b) => Math.abs(a.ts - (latest.ts - 3600)) - Math.abs(b.ts - (latest.ts - 3600)))[0];
+    if (!before) continue;
+    if (latest.liquidity_usd != null && before.liquidity_usd > 0 && latest.liquidity_usd <= before.liquidity_usd * (1 - config.exit.liquidityDropShare))
+      fire('exit_liquidity', mint, null, latest.ts, { from: before.liquidity_usd, to: latest.liquidity_usd });
+    if (latest.vol_h1 != null && before.vol_h1 != null && latest.buyers_h1 != null && before.buyers_h1 != null
+        && latest.vol_h1 > before.vol_h1 && latest.buyers_h1 < before.buyers_h1)
+      fire('exit_divergence', mint, null, latest.ts, { vol: latest.vol_h1, buyers: latest.buyers_h1 });
   }
 }
