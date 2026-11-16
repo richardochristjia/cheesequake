@@ -14,8 +14,8 @@
 - [x] Implement `Ping.tsx` with alert kind and wallet filters, consensus wallet labels, `KIND_INFO` tooltips, and shared Watch toggles
 
 ## Phase 4: Narratives & Tracer Views
-- [ ] Implement `Narratives.tsx` with expandable plain-English score breakdowns + progress bars, theme share bars with top-5 toggle, wallet scorecard, and calibration table
-- [ ] Implement `Tracer.tsx` and interactive `TracerGraph.tsx` SVG DAG with curved Bezier edges, directional markers, and clickable node inspector
+- [x] Implement `Narratives.tsx` with expandable plain-English score breakdowns + progress bars, theme share bars with top-5 toggle, wallet scorecard, and calibration table
+- [x] Implement `Tracer.tsx` and interactive `TracerGraph.tsx` SVG DAG with curved Bezier edges, directional markers, and clickable node inspector
 
 ## Phase 5: Test Migration & Verification
 - [ ] Port UI tests from `test/ui.test.js` and `test/server.test.js` (`loadDashboard`) to Vitest + React Testing Library in `client/src/__tests__/ui.test.tsx`

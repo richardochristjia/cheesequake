@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
-import { Card } from './components/ui';
 import { Market } from './pages/Market';
+import { Narratives } from './pages/Narratives';
 import { Ping } from './pages/Ping';
+import { Tracer } from './pages/Tracer';
 import { Watch } from './pages/Watch';
 import type { TabId, WatchCoin, WatchResponse } from './types';
 
@@ -85,13 +86,14 @@ export default function App() {
           onToggleWatch={toggleWatch}
         />
       )}
-      {(activeTab === 'narratives' || activeTab === 'tracer') && (
-        <Card title={activeTab[0].toUpperCase() + activeTab.slice(1)}>
-          <p className="text-sm text-[#9c8f80]">
-            View pending Phase 4 implementation.
-          </p>
-        </Card>
+      {activeTab === 'narratives' && (
+        <Narratives
+          refreshTick={refreshTick}
+          watchedSet={watchedSet}
+          onToggleWatch={toggleWatch}
+        />
       )}
+      {activeTab === 'tracer' && <Tracer refreshTick={refreshTick} />}
     </Layout>
   );
 }
