@@ -108,6 +108,51 @@ test('subsequent cycles after initial backfill record new trades and fire buy, s
   assert.equal(count(db, 'consensus'), 1);
 });
 
+test('first cycle silently backfills tracked wallet sell on a listed candidate without firing exit alerts', async () => {
+  const db = openDb(':memory:');
+  const mint = addr('M'), dep = addr('D'), trk = addr('T');
+  const now = 1_000_000 * 1000;
+  db.prepare('INSERT INTO tokens(mint, creator) VALUES (?,?)').run(mint, dep);
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,1)').run(now / 1000 - 600, mint, 70, 'confirm');
+  const rpc = fakeRpc({
+    [dep]: [{ signature: 'hist-dep-sell', tx: tx({ wallet: dep, mint, token: -100, sol: 1, blockTime: now / 1000 - 300 }) }],
+    [trk]: [{ signature: 'hist-trk-sell', tx: tx({ wallet: trk, mint, token: -100, sol: 1, blockTime: now / 1000 - 200 }) }],
+  });
+  await runWalletCycle({ db, rpc, tracked: [dep, trk], solUsd: 100, now: () => now });
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM trades').get().c, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM alerts').get().c, 0);
+});
+
+test('transient null transaction during initial backfill retries on next cycle with 0 alerts', async () => {
+  const db = openDb(':memory:');
+  const w = addr('A');
+  const book = {
+    [w]: [
+      { signature: 's1', tx: tx({ wallet: w, blockTime: 100 }) },
+      { signature: 's2', tx: tx({ wallet: w, blockTime: 200 }) },
+      { signature: 's3', tx: tx({ wallet: w, blockTime: 300 }) },
+    ],
+  };
+  const baseRpc = fakeRpc(book);
+  let blockS2 = true;
+  const rpc = {
+    ...baseRpc,
+    async transaction(sig) {
+      if (sig === 's2' && blockS2) return null;
+      return baseRpc.transaction(sig);
+    },
+  };
+  await runWalletCycle({ db, rpc, tracked: [w], solUsd: 100, now: () => 1e12 });
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(w), undefined);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM alerts').get().c, 0);
+
+  blockS2 = false;
+  await runWalletCycle({ db, rpc, tracked: [w], solUsd: 100, now: () => 1e12 });
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM trades').get().c, 3);
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(w).last_sig, 's3');
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM alerts').get().c, 0);
+});
+
 test('three wallets in 40 minutes, then a fourth: one consensus alert', async () => {
   const db = await scenario([1000, 1000 + 1200, 1000 + 2400, 1000 + 2500]);
   assert.equal(count(db, 'buy'), 4);

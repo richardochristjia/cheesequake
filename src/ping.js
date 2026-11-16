@@ -25,9 +25,13 @@ export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligib
   let ok = 0;
   const sigs = allSigs.filter((s) => s.err != null || ++ok <= maxTx).reverse();
   const recorded = [];
+  const advance = (sig) => { if (!backfill) setCursor.run(wallet, sig); };
+  let lastSig = null;
+  let paused = false;
   for (const s of sigs) {
     if (s.err != null) {
-      setCursor.run(wallet, s.signature);
+      advance(s.signature);
+      lastSig = s.signature;
       continue;
     }
     const tx = await rpc.transaction(s.signature);
@@ -35,9 +39,10 @@ export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligib
       // Fresh signatures can be unavailable; retry next cycle, give up after 3.
       const p = db.prepare('SELECT cycles FROM pending_sigs WHERE sig = ?').get(s.signature)?.cycles ?? 0;
       db.prepare('INSERT OR REPLACE INTO pending_sigs(sig, wallet, cycles) VALUES (?,?,?)').run(s.signature, wallet, p + 1);
-      if (p + 1 < MAX_NULL_CYCLES) break;
+      if (p + 1 < MAX_NULL_CYCLES) { paused = true; break; }
       db.prepare('DELETE FROM pending_sigs WHERE sig = ?').run(s.signature);
-      setCursor.run(wallet, s.signature);
+      advance(s.signature);
+      lastSig = s.signature;
       continue;
     }
     const ts = tx.blockTime ?? s.blockTime ?? Math.floor(now() / 1000);
@@ -45,13 +50,19 @@ export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligib
       db.prepare('INSERT OR IGNORE INTO trades(sig, wallet, mint, side, token_amount, quote_usd, ts) VALUES (?,?,?,?,?,?,?)')
         .run(s.signature, wallet, t.mint, t.side, t.tokenAmount, t.quoteUsd, ts);
       recorded.push({ ...t, sig: s.signature, ts });
+      if (backfill && (t.side === 'sell' || t.side === 'out')) {
+        db.prepare('INSERT OR IGNORE INTO pending_sigs(sig, wallet, cycles) VALUES (?,?,0)')
+          .run(`backfill:${s.signature}:${t.mint}`, wallet);
+      }
       if (!backfill && tracked.has(wallet) && (t.side === 'buy' || t.side === 'sell')) {
         insertAlert(db, { ts, kind: t.side, mint: t.mint, wallet, detail: { usd: t.quoteUsd, sig: s.signature }, dedupe: `${t.side}:${s.signature}:${t.mint}` });
         if (t.side === 'buy') checkConsensus({ db, mint: t.mint, ts, tracked, eligible, config });
       }
     }
-    setCursor.run(wallet, s.signature);
+    advance(s.signature);
+    lastSig = s.signature;
   }
+  if (backfill && !paused && lastSig) setCursor.run(wallet, lastSig);
   return recorded;
 }
 
@@ -100,7 +111,10 @@ export function checkExits({ db, tracked, now, config = defaultConfig }) {
   const trackedSet = new Set(tracked);
   const fire = (kind, mint, wallet, ts, detail) =>
     insertAlert(db, { ts, kind, mint, wallet, detail, dedupe: `${kind}:${mint}:${wallet ?? ''}:${Math.floor(ts / 3600)}` });
-  const trades = db.prepare("SELECT wallet, side, ts, quote_usd FROM trades WHERE mint = ? AND side IN ('sell','out')");
+  const trades = db.prepare(
+    `SELECT wallet, side, ts, quote_usd FROM trades
+     WHERE mint = ? AND side IN ('sell','out')
+       AND NOT EXISTS (SELECT 1 FROM pending_sigs WHERE sig = 'backfill:' || trades.sig || ':' || trades.mint)`);
   const snaps = db.prepare('SELECT ts, liquidity_usd, vol_h1, buyers_h1 FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC');
   for (const { mint, creator } of mints) {
     for (const t of trades.all(mint)) {
