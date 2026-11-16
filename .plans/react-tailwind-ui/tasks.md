@@ -18,13 +18,13 @@
 - [x] Implement `Tracer.tsx` and interactive `TracerGraph.tsx` SVG DAG with curved Bezier edges, directional markers, and clickable node inspector
 
 ## Phase 5: Test Migration & Verification
-- [ ] Port UI tests from `test/ui.test.js` and `test/server.test.js` (`loadDashboard`) to Vitest + React Testing Library in `client/src/__tests__/ui.test.tsx`
-- [ ] Update `test/server.test.js` for `public/dist/` static serving, path-traversal guard, and `client/src` XSS static check; remove legacy `public/index.html` and `test/ui.test.js`
+- [x] Port UI tests from `test/ui.test.js` and `test/server.test.js` (`loadDashboard`) to Vitest + React Testing Library in `client/src/__tests__/ui.test.tsx`
+- [x] Update `test/server.test.js` for `public/dist/` static serving, path-traversal guard, and `client/src` XSS static check; remove legacy `public/index.html` and `test/ui.test.js`
 
 ## Verification
-- [ ] `npm run build` compiles `client/` into `public/dist/` with zero TypeScript or Vite errors
-- [ ] `npm test` passes all `node --test` backend suites and all `vitest run` UI tests
-- [ ] `src/server.js` serves on `127.0.0.1` only, rejects foreign `Host` (403) and path traversal (404), and `client/src` has zero `innerHTML` or `dangerouslySetInnerHTML`
+- [x] `npm run build` compiles `client/` into `public/dist/` with zero TypeScript or Vite errors
+- [x] `npm test` passes all `node --test` backend suites and all `vitest run` UI tests
+- [x] `src/server.js` serves on `127.0.0.1` only, rejects foreign `Host` (403) and path traversal (404), and `client/src` has zero `innerHTML` or `dangerouslySetInnerHTML`
 
 ## Manual checks
 - [ ] manual: Open the live dashboard in a browser, verify the Burnt Basque dark theme across all 5 tabs, hover the Market Trench Index chart tooltip, toggle a Watch DexScreener chart iframe and confirm it does not reload on a 30s refresh, and click a node in the Tracer SVG graph.

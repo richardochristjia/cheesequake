@@ -108,7 +108,7 @@ export function WalletDisplay({
   if (!address) return null;
   return (
     <span className="inline-flex items-center gap-1.5 flex-wrap">
-      {label && <span className="font-medium text-[#f4ede2]">{label}</span>}
+      {label && <span className="font-medium text-[#f4ede2]">{label} </span>}
       <AddressLink address={address} />
     </span>
   );
@@ -127,7 +127,7 @@ export function AlertWalletDisplay({ alert }: { alert: AlertItem }) {
       <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
         {wallets.map((w, i) => (
           <span key={w} className="inline-flex items-center gap-1">
-            {i > 0 && <span className="text-[#9c8f80]">,</span>}
+            {i > 0 && <span className="text-[#9c8f80]">, </span>}
             <WalletDisplay
               address={w}
               label={Object.hasOwn(labels, w) ? labels[w] : null}
