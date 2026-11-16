@@ -1,12 +1,25 @@
 import http from 'node:http';
-import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { B58 } from './wallets.js';
 import { recentHourly, trenchIndex } from './market.js';
 import { runningNow, watchList, enrichAlert } from './score.js';
 import { scorecardFor } from './scorecard.js';
 import { calibration } from './outcomes.js';
 
-const PAGE = new URL('../public/index.html', import.meta.url);
+const DIST_DIR = path.resolve(fileURLToPath(new URL('../public/dist', import.meta.url)));
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
+  '.ico': 'image/x-icon',
+};
 
 // deps: {db, config, tracer: {start(wallet), get(wallet)}, wallets: () => [{address,label}], onWatch, now}
 export function createServer({ db, config, tracer, wallets = () => [], onWatch = () => {}, now = Date.now }) {
@@ -75,11 +88,28 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
         return send(200, { ok: true, coins: watchList(db, now(), config, wallets()) });
       }
       if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
-      if (url.pathname === '/') return send(200, readFileSync(PAGE, 'utf8'), 'text/html');
+      if (url.pathname === '/') {
+        const indexPath = path.join(DIST_DIR, 'index.html');
+        if (!existsSync(indexPath)) return send(404, { error: 'not found' });
+        return send(200, readFileSync(indexPath, 'utf8'), 'text/html');
+      }
       const h = Object.hasOwn(api, url.pathname) && api[url.pathname];
-      if (!h) return send(404, { error: 'not found' });
-      const out = h(url.searchParams);
-      return Array.isArray(out) ? send(out[0], out[1]) : send(200, out);
+      if (h) {
+        const out = h(url.searchParams);
+        return Array.isArray(out) ? send(out[0], out[1]) : send(200, out);
+      }
+      if (!url.pathname.startsWith('/api/')) {
+        let decoded;
+        try { decoded = decodeURIComponent(url.pathname); } catch { return send(400, { error: 'bad path' }); }
+        const resolved = path.resolve(DIST_DIR, '.' + decoded);
+        if (resolved.startsWith(DIST_DIR + path.sep) && existsSync(resolved) && statSync(resolved).isFile()) {
+          const ext = path.extname(resolved).toLowerCase();
+          const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+          res.writeHead(200, { 'content-type': contentType, 'x-content-type-options': 'nosniff' });
+          return res.end(readFileSync(resolved));
+        }
+      }
+      return send(404, { error: 'not found' });
     } catch (e) {
       console.error(`server: ${e.message}`);
       return send(500, { error: 'internal error' });

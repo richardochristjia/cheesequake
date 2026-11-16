@@ -1,0 +1,307 @@
+diff --git a/public/index.html b/public/index.html
+index 8555433..085a5bc 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -5,32 +5,57 @@
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>Cheesequake</title>
+ <style>
+-:root { --bg:#f6f5f1; --fg:#1d1d1b; --mut:#6b6a63; --card:#fff; --line:#dedbd0; --acc:#c47f00; --good:#2b7a3d; --bad:#b3261e; }
+-@media (prefers-color-scheme: dark) { :root { --bg:#151513; --fg:#ecebe4; --mut:#9a988c; --card:#1f1f1c; --line:#33332e; --acc:#e8a317; --good:#5fc27a; --bad:#f2766d; } }
++:root { --bg:#f6f5f1; --fg:#1d1d1b; --mut:#6b6a63; --card:#fff; --line:#dedbd0; --acc:#c47f00; --good:#2b7a3d; --bad:#b3261e; --mid:#8a5a00; }
++@media (prefers-color-scheme: dark) { :root { --bg:#151513; --fg:#ecebe4; --mut:#9a988c; --card:#1f1f1c; --line:#33332e; --acc:#e8a317; --good:#5fc27a; --bad:#f2766d; --mid:#e8a317; } }
+ * { box-sizing: border-box; }
+ body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+ header { padding:16px; border-bottom:1px solid var(--line); }
+ h1 { margin:0; font-size:20px; }
+ .note { color:var(--mut); font-size:13px; margin:2px 0 0; }
+ nav { display:flex; gap:4px; padding:8px 16px 0; flex-wrap:wrap; }
+-nav button { background:none; border:0; border-bottom:2px solid transparent; color:var(--mut); padding:8px 12px; font:inherit; cursor:pointer; }
++nav button { background:none; border:0; border-bottom:2px solid transparent; color:var(--mut); padding:8px 12px; font:inherit; cursor:pointer; min-height:44px; }
+ nav button[aria-selected="true"] { color:var(--fg); border-color:var(--acc); }
+ main { padding:16px; max-width:1100px; }
+ section[hidden] { display:none; }
+ .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; overflow-x:auto; }
+-h2 { font-size:15px; margin:0 0 8px; }
++h2 { font-size:16px; margin:0 0 8px; }
+ table { border-collapse:collapse; width:100%; font-size:14px; }
+ th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+ th { color:var(--mut); font-weight:500; }
+ .big { font-size:44px; font-weight:600; line-height:1; }
+ .zone { color:var(--acc); font-size:18px; margin-left:8px; }
+ .mut { color:var(--mut); }
+-input, select { font:inherit; padding:6px 8px; background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:6px; }
++input, select { font:inherit; padding:6px 8px; background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:8px; }
+ input { width:min(100%, 420px); }
+-button.go { font:inherit; padding:6px 12px; background:var(--acc); color:#111; border:0; border-radius:6px; cursor:pointer; }
++.go { font:inherit; font-weight:500; min-height:36px; padding:4px 12px; background:var(--acc); color:#111; border:0; border-radius:8px; cursor:pointer; }
++.go.quiet { background:none; color:var(--fg); border:1px solid var(--line); }
+ a { color:var(--acc); }
+ svg { max-width:100%; height:auto; }
+-.reasons { white-space:normal; color:var(--mut); }
++.grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 64px minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.6fr) 136px; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
++.grid > *, .trow > *, .part > * { min-width:0; overflow-wrap:break-word; }
++.lead { color:var(--fg); margin:0 0 12px; max-width:70ch; }
++.head { color:var(--mut); font-size:13px; }
++.num { font-weight:600; font-size:18px; }
++.good { color:var(--good); } .mid { color:var(--mid); } .bad { color:var(--bad); } .low { color:var(--mid); }
++.why { padding:16px; border-bottom:1px solid var(--line); border-radius:8px; }
++.parts { list-style:none; margin:0; padding:0; }
++.part { display:grid; grid-template-columns:74px minmax(0,1fr) auto; gap:12px; align-items:start; padding:8px 0; border-bottom:1px solid var(--line); }
++.part p { margin:0; color:var(--fg); }
++.part strong { color:var(--fg); }
++.lv { font-size:12px; font-weight:600; text-align:center; padding:4px 8px; border:1px solid currentColor; border-radius:8px; white-space:nowrap; }
++.pts { color:var(--mut); font-size:13px; white-space:nowrap; }
++.foot { color:var(--mut); font-size:13px; margin:12px 0 0; }
++.trow { display:grid; grid-template-columns:minmax(0,1.2fr) 64px minmax(0,1fr) 64px; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); }
++.more { margin-top:12px; }
++:focus-visible { outline:2px solid var(--fg); outline-offset:2px; }
++@media (max-width:700px) {
++  .grid.head { display:none; }
++  .grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); padding:12px 0; }
++  .grid > [data-l]::before { content:attr(data-l); display:block; color:var(--mut); font-size:12px; }
++  .grid .go, .more { grid-column:1 / -1; min-height:44px; width:100%; }
++  .part { grid-template-columns:74px minmax(0,1fr); }
++  .part > .pts { grid-column:2; }
++}
+ </style>
+ </head>
+ <body>
+@@ -111,25 +136,213 @@ function detail(a) {
+   return '';
+ }
+ 
++const PARTS = {
++  wallets: {
++    name: 'Wallets you follow',
++    max: 30,
++    levels: {
++      Good: 'Multiple tracked wallets hold this coin.',
++      OK: 'Some tracked wallets hold this coin.',
++      Weak: 'A small amount of tracked-wallet interest, not a strong signal.',
++      None: 'None of the wallets you track hold this coin.',
++      'No data': 'Could not check tracked wallets.',
++    },
++  },
++  health: {
++    name: 'Buyer health',
++    max: 25,
++    levels: {
++      Good: 'New buyers are arriving quickly, buys lead sells, and top holders own a small share.',
++      OK: 'New buyers are arriving, buys outnumber sells, and the 10 biggest holders do not own too much.',
++      Weak: 'Buyer growth, buy-to-sell balance, or holder spread is weak.',
++      None: 'Buyer growth, buy share, and holder spread all scored zero.',
++      'No data': 'Missing buyer counts or top-holder data.',
++    },
++  },
++  deployer: {
++    name: 'Creator',
++    max: 15,
++    levels: {
++      Good: 'The person who made the coin still holds some and has not been seen selling.',
++      OK: 'The person who made the coin has not been seen selling, but holds none of it now.',
++      Weak: 'Creator holding or selling signals are weak.',
++      None: 'The person who made the coin has been seen selling.',
++      'No data': 'The creator address is not available.',
++    },
++  },
++  liquidity: {
++    name: 'Easy to sell',
++    max: 15,
++    levels: {
++      Good: 'There is enough money in the trading pool, and it is locked so nobody can pull it out.',
++      OK: 'The trading pool has moderate depth or lock coverage.',
++      Weak: 'The trading pool is thin compared with the coin\'s size, so selling may move the price.',
++      None: 'The trading pool has no usable depth or lock score.',
++      'No data': 'Could not check pool depth or whether liquidity is locked.',
++    },
++  },
++  momentum: {
++    name: 'Momentum',
++    max: 10,
++    levels: {
++      Good: 'Trading in the last hour is much faster than its 6-hour pace.',
++      OK: 'Trading in the last hour is picking up compared with its 6-hour pace.',
++      Weak: 'Trading in the last hour is only slightly above its 6-hour pace.',
++      None: 'Trading in the last hour is at or below its 6-hour pace.',
++      'No data': 'Missing 1-hour or 6-hour trading volume.',
++    },
++  },
++  narrative: {
++    name: 'Theme',
++    max: 5,
++    levels: {
++      Good: (t) => (t ? 'It belongs to the "' + t + '" theme, which grew this hour.' : 'It belongs to a theme that grew this hour.'),
++      OK: (t) => (t ? 'It belongs to the "' + t + '" theme, which held steady or cooled this hour.' : 'It belongs to a theme that held steady or cooled this hour.'),
++      Weak: (t) => (t ? 'It belongs to the "' + t + '" theme, with weak theme growth.' : 'It belongs to a theme with weak growth.'),
++      None: 'It does not share a theme word with other trending coins this hour.',
++      'No data': 'Theme data was not available.',
++    },
++  },
++};
++const BANDS = {
++  strong: { label: 'Strong', cls: 'good' },
++  confirm: { label: 'Promising', cls: 'good' },
++  neutral: { label: 'Mixed', cls: 'mid' },
++  risk: { label: 'Weak', cls: 'low' },
++  avoid: { label: 'Very weak', cls: 'bad' },
++};
++const UNKNOWNS = {
++  mint_authority: 'mint permission check',
++  freeze_authority: 'freeze permission check',
++  rugged: 'rug-pull check',
++  transfer_fee: 'transfer fee check',
++  lp_unlocked: 'locked pool check',
++  top10: 'top 10 holders check',
++  insiders: 'insider wallets check',
++  liquidity: 'easy to sell',
++  age: 'coin age check',
++  wash: 'fake volume check',
++  wallets: 'wallets you follow',
++  health: 'buyer health',
++  deployer: 'creator',
++  momentum: 'momentum',
++  narrative: 'theme',
++};
++const LEVEL_CLS = { Good: 'good', OK: 'mid', Weak: 'low', None: 'bad', 'No data': 'mut' };
++const bandInfo = (b) => BANDS[b] || { label: b || 'unknown', cls: 'mut' };
++const missingList = (xs) => [...new Set((xs || []).map((k) => UNKNOWNS[k] || k))].join(', ') || 'none';
++function explainPart(key, reason, unknowns, theme) {
++  const def = PARTS[key];
++  const max = reason ? reason.max : def.max;
++  const pts = reason ? reason.points : 0;
++  const isUnknown = !reason || (unknowns || []).includes(key);
++  let level = 'None';
++  if (isUnknown) level = 'No data';
++  else if (pts <= 0) level = 'None';
++  else {
++    const ratio = max > 0 ? pts / max : 0;
++    level = ratio >= 0.75 ? 'Good' : ratio >= 0.4 ? 'OK' : 'Weak';
++  }
++  const raw = def.levels[level];
++  const text = typeof raw === 'function' ? raw(theme) : raw;
++  return { name: def.name, level, cls: LEVEL_CLS[level], text, points: pts, max };
++}
++
++const openMints = new Set();
++function renderRunning(running) {
++  if (!running.length) return [h('p', { class: 'mut' }, 'Nothing has passed every safety check in the last 30 minutes.')];
++  const head = h('div', { class: 'grid head' }, ['Coin', 'Theme', 'Score', 'Reading', 'Market cap', 'Missing data', ''].map((x) => h('span', {}, x)));
++  const rows = [];
++  for (const r of running) {
++    const isOpen = openMints.has(r.mint);
++    const bi = bandInfo(r.band);
++    const coin = r.symbol ? [h('strong', {}, r.symbol), ' ', link(r.mint)] : [h('strong', {}, link(r.mint))];
++    const mcap = r.mcap_usd === null || r.mcap_usd === undefined ? 'unknown' : '$' + fmt(r.mcap_usd);
++    const btn = h('button', { class: isOpen ? 'go' : 'go quiet', 'aria-expanded': String(isOpen) }, isOpen ? 'Hide' : 'Explain score');
++    const row = h('div', { class: 'grid' },
++      h('span', {}, ...coin),
++      h('span', { 'data-l': 'Theme' }, r.theme || 'no theme'),
++      h('span', { class: 'num', 'data-l': 'Score' }, r.score),
++      h('span', { class: bi.cls, 'data-l': 'Reading' }, bi.label),
++      h('span', { 'data-l': 'Market cap' }, mcap),
++      h('span', { 'data-l': 'Missing data' }, missingList(r.unknowns)),
++      btn);
++    const byPart = new Map((r.reasons || []).map((x) => [x.part, x]));
++    const items = Object.keys(PARTS).map((k) => {
++      const p = explainPart(k, byPart.get(k), r.unknowns, r.theme);
++      return h('li', { class: 'part' },
++        h('span', { class: 'lv ' + p.cls }, p.level),
++        h('div', {}, h('strong', {}, p.name), h('p', {}, p.text)),
++        h('span', { class: 'pts' }, p.points + ' of ' + p.max));
++    });
++    const why = h('div', isOpen ? { class: 'why' } : { class: 'why', hidden: '' },
++      h('ul', { class: 'parts' }, items),
++      h('p', { class: 'foot' }, 'Missing data counts as 0 points and caps the score at 79.'));
++    btn.onclick = () => {
++      if (openMints.has(r.mint)) openMints.delete(r.mint);
++      else openMints.add(r.mint);
++      const open = openMints.has(r.mint);
++      why.hidden = !open;
++      btn.textContent = open ? 'Hide' : 'Explain score';
++      btn.className = open ? 'go' : 'go quiet';
++      btn.setAttribute('aria-expanded', String(open));
++    };
++    rows.push(row, why);
++  }
++  return [head, ...rows];
++}
++
++let showAllThemes = false;
++function renderThemes(themes) {
++  const wrap = h('div', {});
++  const draw = () => {
++    if (!themes.length) {
++      wrap.replaceChildren(h('p', { class: 'mut' }, 'No themes yet.'));
++      return;
++    }
++    const list = showAllThemes ? themes : themes.slice(0, 5);
++    const kids = [
++      h('div', { class: 'trow head' }, ['Word', 'Coins', 'Traded, 1 h', 'Share'].map((x) => h('span', {}, x))),
++      ...list.map((t) => h('div', { class: 'trow' }, [t.keyword, t.tokens, '$' + fmt(t.volume), fmt(t.share * 100, 1) + '%'].map((x) => h('span', {}, x)))),
++    ];
++    if (themes.length > 5) {
++      const toggle = h('button', { class: 'go quiet more' }, showAllThemes ? 'Show top 5' : 'Show all ' + themes.length + ' themes');
++      toggle.onclick = () => { showAllThemes = !showAllThemes; draw(); };
++      kids.push(toggle);
++    }
++    wrap.replaceChildren(...kids);
++  };
++  draw();
++  return wrap;
++}
++
+ async function narratives() {
+   const n = await get('/api/narratives');
+-  const running = n.running.map((r) => {
+-    const why = h('tr', { hidden: '' }, h('td', { colspan: 8, class: 'reasons' }, r.reasons.map((x) => x.part + ' ' + x.points + '/' + x.max + ': ' + x.note).join('  |  ')));
+-    const btn = h('button', { class: 'go' }, 'Why');
+-    btn.onclick = () => { why.hidden = !why.hidden; };
+-    const row = h('tr', {}, [r.symbol || short(r.mint), r.theme || '', r.score, r.band, '$' + fmt(r.mcap_usd), '', r.unknowns.join(', ') || 'none', btn].map((c) => h('td', {}, c)));
+-    row.children[0].replaceChildren(r.symbol ? r.symbol + ' ' : '', link(r.mint));
+-    return [row, why];
+-  });
+-  const rt = h('table', {}, h('thead', {}, h('tr', {}, ['Coin', 'Theme', 'Score', 'Band', 'Market cap', '', 'Unknown', ''].map((x) => h('th', {}, x)))), h('tbody', {}, running.flat()));
++  const calEmpty = 'No results yet. The tool checks each coin\'s price 1, 6 and 24 hours later.' + (n.calibration.missed ? ' Missed: ' + n.calibration.missed + '.' : '');
+   put('narratives',
+-    card('Themes this hour', n.themes.length ? table(['Keyword', 'Tokens', 'Volume 1h', 'Share'], n.themes.map((t) => [t.keyword, t.tokens, '$' + fmt(t.volume), fmt(t.share * 100, 1) + '%'])) : h('p', { class: 'mut' }, 'No themes yet.')),
+-    card('Running now', n.running.length ? rt : h('p', { class: 'mut' }, 'Nothing has passed every veto in the last 30 minutes.')),
+-    card('Best calls: wallet scorecard', n.wallets.length ? table(['Wallet', 'Class', 'Bought', 'Win rate', 'Median hold (s)', 'Still holding'],
+-      n.wallets.map((w) => [w.label ? w.label + ' ' : '', w.class, w.bought, w.winRate === null ? 'unknown' : fmt(w.winRate * 100) + '%', fmt(w.medianHoldSeconds), w.stillHoldingShare === null ? 'unknown' : fmt(w.stillHoldingShare * 100) + '%']).map((r, i) => [[r[0], link(n.wallets[i].address)], ...r.slice(1)]))
+-      : h('p', { class: 'mut' }, 'No wallets tracked. Add some to wallets.txt.')),
+-    card('Calibration: later price by score band', n.calibration.rows.length ? table(['Band', 'Horizon', 'Count', 'Mean change', 'Share up'],
+-      n.calibration.rows.map((r) => [r.band, r.horizon_h + ' h', r.count, fmt(r.meanChangePct, 1) + '%', fmt(r.positiveShare * 100) + '%'])) : h('p', { class: 'mut' }, 'No outcomes yet. Missed: ' + n.calibration.missed)));
++    card('Running now',
++      h('p', { class: 'lead' }, 'Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction.'),
++      ...renderRunning(n.running)),
++    card('Themes this hour',
++      h('p', { class: 'lead' }, 'A theme is a word that three or more trending coins share in their name or description. Share is how much of the last hour\'s trading went to coins with that word.'),
++      renderThemes(n.themes)),
++    card('Best calls: wallet scorecard',
++      h('p', { class: 'lead' }, 'How tracked wallets have performed on their recorded trades.'),
++      n.wallets.length ? table(['Wallet', 'Class', 'Bought', 'Win rate', 'Median hold (s)', 'Still holding'],
++        n.wallets.map((w) => [
++          w.label ? w.label + ' ' : '',
++          w.class,
++          w.bought,
++          w.winRate === null ? 'not enough trades yet' : fmt(w.winRate * 100) + '%',
++          w.medianHoldSeconds === null || w.medianHoldSeconds === undefined ? 'not enough trades yet' : fmt(w.medianHoldSeconds),
++          w.stillHoldingShare === null ? 'not enough trades yet' : fmt(w.stillHoldingShare * 100) + '%',
++        ]).map((r, i) => [[r[0], link(n.wallets[i].address)], ...r.slice(1)]))
++        : h('p', { class: 'mut' }, 'No wallets tracked. Add some to wallets.txt.')),
++    card('Calibration: later price by score band',
++      h('p', { class: 'lead' }, 'Checks each coin\'s price 1, 6 and 24 hours after scoring.'),
++      n.calibration.rows.length ? table(['Band', 'Horizon', 'Count', 'Mean change', 'Share up'],
++        n.calibration.rows.map((r) => [bandInfo(r.band).label, r.horizon_h + ' h', r.count, fmt(r.meanChangePct, 1) + '%', fmt(r.positiveShare * 100) + '%']))
++        : h('p', { class: 'mut' }, calEmpty)));
+ }
+ 
+ const TYPE_COLOR = { exchange: '#2b7a3d', mixer: '#b3261e', other: '#c47f00' };
+@@ -176,6 +389,7 @@ function show(name) {
+   current = name;
+   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+   for (const id of Object.keys(TABS)) document.getElementById(id).hidden = id !== name;
++  if (!document.getElementById(name).hasChildNodes()) put(name, h('p', { class: 'mut' }, 'Loading…'));
+   refresh();
+ }
+ const refresh = () => TABS[current]().catch((e) => put(current, h('p', { class: 'mut' }, 'Could not load: ' + e.message)));

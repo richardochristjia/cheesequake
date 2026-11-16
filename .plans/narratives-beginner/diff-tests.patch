@@ -1,0 +1,156 @@
+diff --git a/test/server.test.js b/test/server.test.js
+index 4a77a95..1fcd9c4 100644
+--- a/test/server.test.js
++++ b/test/server.test.js
+@@ -2,6 +2,7 @@ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ import { readFileSync } from 'node:fs';
+ import net from 'node:net';
++import vm from 'node:vm';
+ import { openDb } from '../src/db.js';
+ import { config } from '../src/config.js';
+ import { startServer } from '../src/server.js';
+@@ -88,3 +89,143 @@ test('a foreign Host header gets 403, a loopback one gets 200', async () => {
+     assert.match(await get(`127.0.0.1:${port}`), /^HTTP\/1\.1 200/);
+   } finally { server.close(); server.closeAllConnections(); }
+ });
++
++function loadDashboard(narrativesPayload) {
++  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
++  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
++  class Node { constructor(t = '') { this._text = String(t); } get textContent() { return this._text; } set textContent(v) { this._text = String(v); } }
++  class El extends Node {
++    constructor(tag) {
++      super('');
++      this.tagName = tag.toUpperCase();
++      this.attrs = {};
++      this.dataset = {};
++      this.children = [];
++      this.hidden = false;
++    }
++    set textContent(v) { this.children = []; this._text = String(v); }
++    get textContent() { return this.children.length ? this.children.map((c) => c.textContent).join('') : this._text; }
++    set className(v) { this.attrs.class = v; }
++    get className() { return this.attrs.class || ''; }
++    setAttribute(k, v) {
++      this.attrs[k] = String(v);
++      if (k === 'hidden') this.hidden = true;
++      if (k.startsWith('data-')) this.dataset[k.slice(5)] = String(v);
++    }
++    getAttribute(k) { return this.attrs[k]; }
++    append(...kids) { this.children.push(...kids); }
++    replaceChildren(...kids) { this._text = ''; this.children = [...kids]; }
++    hasChildNodes() { return this.children.length > 0 || this._text.length > 0; }
++    get text() { return this.textContent; }
++    findAll(pred) {
++      const out = [];
++      const walk = (n) => { if (n instanceof El) { if (pred(n)) out.push(n); n.children.forEach(walk); } };
++      walk(this);
++      return out;
++    }
++  }
++  const els = new Map(['tabs', 'market', 'ping', 'narratives', 'tracer'].map((id) => [id, new El('section')]));
++  const document = {
++    createElement: (t) => new El(t),
++    createElementNS: (_ns, t) => new El(t),
++    createTextNode: (t) => new Node(t),
++    getElementById: (id) => els.get(id),
++    querySelectorAll: () => els.get('tabs').children,
++  };
++  const fetch = async (url) => ({
++    json: async () => (url === '/api/narratives' ? narrativesPayload
++      : { index: { value: null, zone: 'Neutral' }, hours: 0, warmupHours: 168, hourly: [] }),
++  });
++  const sandbox = { Node, document, fetch, setInterval: () => {}, encodeURIComponent, Object, Set, Map, Array, Number, String, Math, Date, RegExp, URL };
++  const exports = vm.runInNewContext(`${script}\n;({ PARTS, BANDS, UNKNOWNS, explainPart, bandInfo, missingList, narratives, openMints, show })`, sandbox);
++  return { ...exports, els };
++}
++
++test('narratives glossary covers every config weight, band, and unknown key', () => {
++  const { PARTS, BANDS, UNKNOWNS, explainPart } = loadDashboard({});
++  assert.deepEqual(Object.keys(PARTS).sort(), Object.keys(config.weights).sort());
++  for (const [k, max] of Object.entries(config.weights)) {
++    assert.equal(PARTS[k].max, max);
++    assert.ok(PARTS[k].name);
++    for (const lvl of ['Good', 'OK', 'Weak', 'None', 'No data']) assert.ok(PARTS[k].levels[lvl], `${k} missing ${lvl}`);
++  }
++  assert.deepEqual(Object.keys(BANDS).sort(), config.bands.map(([b]) => b).sort());
++  for (const key of ['mint_authority', 'freeze_authority', 'rugged', 'transfer_fee', 'lp_unlocked', 'top10', 'insiders', 'liquidity', 'age', 'wash', ...Object.keys(config.weights)]) {
++    assert.ok(UNKNOWNS[key], `UNKNOWNS missing ${key}`);
++  }
++  assert.equal(explainPart('wallets', { part: 'wallets', points: 0, max: 30 }, [], null).level, 'None');
++  assert.equal(explainPart('wallets', { part: 'wallets', points: 0, max: 30 }, ['wallets'], null).level, 'No data');
++  assert.equal(explainPart('health', { part: 'health', points: 24, max: 25 }, [], null).level, 'Good');
++  assert.equal(explainPart('health', { part: 'health', points: 15, max: 25 }, [], null).level, 'OK');
++  assert.equal(explainPart('health', { part: 'health', points: 5, max: 25 }, [], null).level, 'Weak');
++  assert.equal(explainPart('liquidity', undefined, [], null).level, 'No data');
++});
++
++test('narratives orders cards, caps themes, handles fallbacks, and preserves open rows on refresh', async () => {
++  const mintA = addr('A'), mintB = addr('B');
++  const reasons = [
++    { part: 'wallets', points: 0, max: 30 },
++    { part: 'health', points: 16, max: 25 },
++    { part: 'deployer', points: 7.5, max: 15 },
++    { part: 'liquidity', points: 0, max: 15 },
++    { part: 'momentum', points: 10, max: 10 },
++    { part: 'narrative', points: 0, max: 5 },
++  ];
++  const payload = {
++    running: [
++      { mint: mintA, symbol: null, theme: null, score: 50, band: 'neutral', mcap_usd: 12000, reasons, unknowns: ['liquidity'] },
++      { mint: mintB, symbol: 'SOCKS', theme: 'fees', score: 34, band: 'risk', mcap_usd: 5000, reasons, unknowns: [] },
++    ],
++    themes: Array.from({ length: 7 }, (_, i) => ({ keyword: 'word' + i, tokens: 3, volume: 1000 - i, share: 0.2 })),
++    wallets: [{ address: addr('W'), label: '', class: 'unrated', bought: 1, winRate: null, medianHoldSeconds: null, stillHoldingShare: null }],
++    calibration: { rows: [], missed: 0 },
++  };
++  const { narratives, show, els } = loadDashboard(payload);
++  show('narratives');
++  assert.equal(els.get('narratives').text, 'Loading…');
++  await narratives();
++
++  const root = els.get('narratives');
++  assert.deepEqual(root.findAll((e) => e.tagName === 'H2').map((e) => e.text), [
++    'Running now',
++    'Themes this hour',
++    'Best calls: wallet scorecard',
++    'Calibration: later price by score band',
++  ]);
++  const runningCard = root.children[0];
++  const rows = runningCard.findAll((e) => e.className === 'grid');
++  assert.match(rows[0].text, /AAAA…1111/);
++  assert.match(rows[0].text, /no theme/);
++  assert.match(rows[0].text, /easy to sell/);
++
++  const themesCard = root.children[1];
++  assert.equal(themesCard.findAll((e) => e.className === 'trow').length, 5);
++  const moreBtn = themesCard.findAll((e) => e.tagName === 'BUTTON')[0];
++  assert.equal(moreBtn.text, 'Show all 7 themes');
++  moreBtn.onclick();
++  assert.equal(themesCard.findAll((e) => e.className === 'trow').length, 7);
++  assert.equal(themesCard.findAll((e) => e.tagName === 'BUTTON')[0].text, 'Show top 5');
++
++  const walletsCard = root.children[2];
++  assert.match(walletsCard.text, /not enough trades yet/);
++  assert.doesNotMatch(walletsCard.text, /\bunknown\b/);
++  assert.match(root.children[3].text, /No results yet\. The tool checks each coin's price 1, 6 and 24 hours later\./);
++
++  const btnA = runningCard.findAll((e) => e.tagName === 'BUTTON')[0];
++  const whyA = runningCard.findAll((e) => e.className === 'why')[0];
++  assert.equal(btnA.text, 'Explain score');
++  assert.equal(whyA.hidden, true);
++  btnA.onclick();
++  assert.equal(btnA.text, 'Hide');
++  assert.equal(whyA.hidden, false);
++  assert.equal(whyA.findAll((e) => e.className === 'part').length, 6);
++  assert.doesNotMatch(whyA.text, /\|/);
++
++  await narratives();
++  const refreshedRunning = root.children[0];
++  assert.equal(refreshedRunning.findAll((e) => e.tagName === 'BUTTON')[0].text, 'Hide');
++  assert.equal(refreshedRunning.findAll((e) => e.className === 'why')[0].hidden, false);
++  assert.equal(refreshedRunning.findAll((e) => e.tagName === 'BUTTON')[1].text, 'Explain score');
++  assert.equal(refreshedRunning.findAll((e) => e.className === 'why')[1].hidden, true);
++  assert.equal(root.children[1].findAll((e) => e.className === 'trow').length, 7);
++});

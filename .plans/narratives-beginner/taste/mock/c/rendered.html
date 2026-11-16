@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheesequake: Narratives, direction C</title>
+<link rel="stylesheet" href="mock-base.css">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400..700&amp;family=DM+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+:root { --bg:#dedad3; --fg:#0a0a0a; --mut:#55514c; --card:#ebe8e2; --line:#c4bfb6; --acc:#256f82; --acc-ink:#ffffff; --good:#1f6a3a; --bad:#a3271d; --mid:#7a5200;
+  --font:"Urbanist", system-ui, sans-serif; --r:16px; --pad:var(--s-5); --row:var(--s-3); --cardbd:0; --size:16px; }
+
+body { margin:0; background:var(--bg); color:var(--fg); font:var(--size)/1.45 var(--font); }
+header { padding:var(--s-4); border-bottom:1px solid var(--line); }
+h1 { margin:0; font-size:20px; }
+.note { color:var(--mut); font-size:13px; margin:4px 0 0; }
+nav { display:flex; gap:var(--s-1); padding:var(--s-2) var(--s-4) 0; }
+nav button { background:none; border:0; border-bottom:2px solid transparent; color:var(--mut); padding:var(--s-3); font:inherit; min-height:44px; }
+nav button[aria-selected="true"] { color:var(--fg); border-color:var(--acc); }
+main { padding:var(--s-4); max-width:1100px; }
+.card { background:var(--card); border:var(--cardbd); border-radius:var(--r); padding:var(--pad); margin-bottom:var(--s-4); }
+h2 { font-size:16px; margin:0 0 4px; }
+.lead { color:var(--mut); margin:0 0 var(--s-3); max-width:70ch; }
+.grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 64px minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.6fr) 136px; gap:var(--s-3); align-items:center; padding:var(--row) 0; border-bottom:1px solid var(--line); }
+.head { color:var(--mut); font-size:13px; }
+.num { font-weight:600; font-size:18px; }
+.addr { color:var(--acc); }
+.go { font:inherit; font-weight:500; min-height:36px; padding:var(--s-1) var(--s-3); background:var(--acc); color:var(--acc-ink); border:0; border-radius:var(--r); }
+.go.quiet { background:none; color:var(--fg); border:1px solid var(--line); }
+.good { color:var(--good); } .mid { color:var(--mid); } .bad { color:var(--bad); } .low { color:var(--mid); }
+.why { padding:var(--pad); border-bottom:1px solid var(--line); border-radius:var(--r); }
+.parts { list-style:none; margin:0; padding:0; }
+.part p { margin:0; color:var(--mut); }
+.part strong { color:var(--fg); }
+.pts { color:var(--mut); font-size:13px; white-space:nowrap; }
+.foot { color:var(--mut); font-size:13px; margin:var(--s-3) 0 0; }
+.trow { display:grid; grid-template-columns:minmax(0,1.2fr) 64px minmax(0,1fr) 64px; gap:var(--s-3); padding:var(--row) 0; border-bottom:1px solid var(--line); }
+.more { margin-top:var(--s-3); }
+.sum { font-size:20px; line-height:1.3; margin:0 0 var(--s-4); color:var(--fg); }
+.stack { display:flex; gap:var(--s-1); height:16px; margin-bottom:var(--s-5); }
+.seg { flex:1 1 0; background:var(--line); border-radius:var(--r); overflow:hidden; }
+.seg i { display:block; height:100%; background:currentColor; }
+.cols { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:var(--s-5); }
+.cols h4 { margin:0 0 var(--s-2); font-size:14px; color:var(--mut); font-weight:600; }
+.part { padding:var(--s-2) 0; }
+.pts { font-weight:400; }
+.why { background:var(--bg); }
+@media (max-width:700px) { .cols { grid-template-columns:minmax(0,1fr); } }
+@media (max-width:700px) {
+  .head { display:none; }
+  .grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); padding:var(--s-3) 0; }
+  .grid > [data-l]::before { content:attr(data-l); display:block; color:var(--mut); font-size:12px; }
+  .grid .go { grid-column:1 / -1; min-height:44px; }
+  .part { grid-template-columns:64px minmax(0,1fr); }
+  .part > .pts { grid-column:2; }
+}
+</style>
+</head>
+<body>
+<header><h1>Cheesequake</h1><p class="note">Research tool. Not trading advice. Scores are untested defaults; it never trades.</p></header>
+<nav><button>Market</button><button>Ping</button><button aria-selected="true">Narratives</button><button>Tracer</button></nav>
+<main>
+<section class="card">
+  <h2>Running now</h2>
+  <p class="lead">Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction.</p>
+  <div class="grid head"><span>Coin</span><span>Theme</span><span>Score</span><span>Reading</span><span>Market cap</span><span>Missing data</span><span></span></div>
+  <div class="grid"><span><strong>Socks</strong> <span class="addr">FS1p…pump</span></span><span data-l="Theme">fees</span><span class="num" data-l="Score">54</span><span class="mid" data-l="Reading">Mixed</span><span data-l="Market cap">$241,543</span><span data-l="Missing data">none</span><button class="go">Hide</button></div><div class="why"><p class="sum"><strong>54 of 100: mixed.</strong> It is easy to sell and trading is picking up, but no wallet you follow has bought it.</p>
+<div class="stack" role="img" aria-label="Points earned by each part of the score"><span class="seg" style="flex-grow:30"><i class="bad" style="width:0%"></i></span><span class="seg" style="flex-grow:25"><i class="mid" style="width:64.4%"></i></span><span class="seg" style="flex-grow:15"><i class="mid" style="width:50%"></i></span><span class="seg" style="flex-grow:15"><i class="good" style="width:100%"></i></span><span class="seg" style="flex-grow:10"><i class="good" style="width:100%"></i></span><span class="seg" style="flex-grow:5"><i class="good" style="width:100%"></i></span></div>
+<div class="cols"><div><h4>What helped</h4><ul class="parts"><li class="part"><strong>Easy to sell <span class="pts">+15 of 15</span></strong><p>There is enough money in the trading pool, and it is locked so nobody can pull it out.</p></li><li class="part"><strong>Momentum <span class="pts">+10 of 10</span></strong><p>Trading in the last hour is much faster than its 6-hour pace.</p></li><li class="part"><strong>Theme <span class="pts">+5 of 5</span></strong><p>It belongs to the "fees" theme, which grew this hour.</p></li></ul></div>
+<div><h4>What held it back</h4><ul class="parts"><li class="part"><strong>Wallets you follow <span class="pts">+0 of 30</span></strong><p>None of the wallets you track hold this coin.</p></li><li class="part"><strong>Buyer health <span class="pts">+16.1 of 25</span></strong><p>New buyers are arriving, buys outnumber sells, and the 10 biggest holders do not own too much.</p></li><li class="part"><strong>Creator <span class="pts">+7.5 of 15</span></strong><p>The person who made the coin has not been seen selling, but holds none of it now.</p></li></ul></div></div><p class="foot">Missing data counts as 0 points and caps the score at 79.</p></div>
+  <div class="grid"><span><strong>THE PULL</strong> <span class="addr">9qbQ…pump</span></span><span data-l="Theme">every</span><span class="num" data-l="Score">44</span><span class="low" data-l="Reading">Weak</span><span data-l="Market cap">$2,490</span><span data-l="Missing data">easy to sell</span><button class="go quiet">Explain score</button></div>
+  <div class="grid"><span><strong>Christmax</strong> <span class="addr">D7My…pump</span></span><span data-l="Theme">christmas</span><span class="num" data-l="Score">34</span><span class="low" data-l="Reading">Weak</span><span data-l="Market cap">$15,635,098</span><span data-l="Missing data">none</span><button class="go quiet">Explain score</button></div>
+  <div class="grid"><span><strong>SLIDES</strong> <span class="addr">8JNc…pump</span></span><span data-l="Theme">viral</span><span class="num" data-l="Score">31</span><span class="low" data-l="Reading">Weak</span><span data-l="Market cap">$47,479</span><span data-l="Missing data">fake volume check, buyer health</span><button class="go quiet">Explain score</button></div>
+  <div class="grid"><span><strong>LAIKA</strong> <span class="addr">CbCY…pump</span></span><span data-l="Theme">no theme</span><span class="num" data-l="Score">8</span><span class="bad" data-l="Reading">Very weak</span><span data-l="Market cap">$3,096</span><span data-l="Missing data">easy to sell, buyer health</span><button class="go quiet">Explain score</button></div>
+</section>
+<section class="card">
+  <h2>Themes this hour</h2>
+  <p class="lead">A theme is a word that three or more trending coins share in their name or description. Share is how much of the last hour's trading went to coins with that word.</p>
+  <div class="trow head"><span>Word</span><span>Coins</span><span>Traded, 1 h</span><span>Share</span></div>
+  <div class="trow"><span>fees</span><span>4</span><span>$478,717</span><span>38.1%</span></div>
+  <div class="trow"><span>into</span><span>3</span><span>$394,992</span><span>31.4%</span></div>
+  <div class="trow"><span>bring</span><span>3</span><span>$392,358</span><span>31.2%</span></div>
+  <div class="trow"><span>will</span><span>3</span><span>$391,458</span><span>31.1%</span></div>
+  <div class="trow"><span>world</span><span>3</span><span>$296,692</span><span>24.4%</span></div>
+  <button class="go quiet more">Show all 38 themes</button>
+</section>
+</main>
+
+
+</body></html>

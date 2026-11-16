@@ -1,0 +1,194 @@
+diff --git a/.agents/RECORD.md b/.agents/RECORD.md
+index 4a54b4f..0c5421d 100644
+--- a/.agents/RECORD.md
++++ b/.agents/RECORD.md
+@@ -49,7 +49,9 @@ Entries are added or amended **only with human approval**.
+ - (wallets) Newly tracked wallets are backfilled from recent on-chain transactions on first sight without raising alerts.
+ - (wallets) Each tracked wallet currently carries a scorecard computed from its own recorded trades.
+ - (ping) A consensus alert is raised when at least three non-sniper tracked wallets buy the same token within sixty minutes.
+-- (ping) Exit alerts are raised for listed tokens on tracked-wallet sells, deployer sells and sharp liquidity drops.
++- (ping) Exit alerts are raised for listed and watched tokens on tracked-wallet sells, deployer sells and sharp liquidity drops.
++- (watch) Watched tokens are managed from the dashboard and persisted to SQLite.
++- (watch) Each watched token carries a hold status derived from its latest safety vetoes, exit alerts and score.
+ - (score) A token that trips any veto is excluded from candidates regardless of its score.
+ - (score) A missing source answer is recorded as unknown and never counts as a pass.
+ - (score) Social media data is currently not an input to the score.
+diff --git a/public/index.html b/public/index.html
+index 2517ddb..790a013 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -32,7 +32,14 @@ input { width:min(100%, 420px); }
+ .go.quiet { background:none; color:var(--fg); border:1px solid var(--line); }
+ a { color:var(--acc); }
+ svg { max-width:100%; height:auto; }
+-.grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 64px minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.6fr) 136px; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
++.grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 64px minmax(0,1fr) minmax(0,1.1fr) minmax(0,1.6fr) auto; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
++.acts { display:flex; gap:6px; flex-wrap:wrap; }
++.whead { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
++.wmeta { display:flex; gap:16px; flex-wrap:wrap; color:var(--mut); font-size:13px; margin:6px 0 10px; }
++.wreasons { margin:8px 0 12px; padding-left:18px; }
++.wreasons li { margin:2px 0; }
++.chart-wrap { margin:10px 0; }
++.chart-frame { width:100%; height:420px; border:1px solid var(--line); border-radius:8px; background:#151513; }
+ .grid > *, .trow > *, .part > * { min-width:0; overflow-wrap:break-word; }
+ .lead { color:var(--fg); margin:0 0 8px; max-width:70ch; }
+ .head { color:var(--mut); font-size:13px; }
+@@ -69,6 +76,7 @@ svg { max-width:100%; height:auto; }
+ <nav role="tablist" id="tabs"></nav>
+ <main>
+   <section id="market"></section>
++  <section id="watch" hidden></section>
+   <section id="ping" hidden></section>
+   <section id="narratives" hidden></section>
+   <section id="tracer" hidden></section>
+@@ -121,14 +129,121 @@ async function market() {
+     card('Last 30 days', chart));
+ }
+ 
++const watchedSet = new Set();
++const openCharts = new Set();
++let watchInput = '';
++function syncWatched(coins) {
++  watchedSet.clear();
++  for (const c of coins || []) watchedSet.add(c.mint);
++}
++async function toggleWatch(mint, after) {
++  const method = watchedSet.has(mint) ? 'DELETE' : 'POST';
++  const res = await fetch('/api/watch?mint=' + encodeURIComponent(mint), { method });
++  const d = await res.json();
++  if (d && Array.isArray(d.coins)) syncWatched(d.coins);
++  if (after) await after();
++}
++function watchBtn(mint, after) {
++  if (!B58.test(mint || '')) return '';
++  const on = watchedSet.has(mint);
++  const b = h('button', { class: on ? 'go' : 'go quiet', 'aria-pressed': String(on) }, on ? 'Watching' : 'Watch');
++  b.onclick = () => toggleWatch(mint, after);
++  return b;
++}
++
++const STATUS_CLS = { safe: 'good', caution: 'mid', flag: 'bad' };
++const STATUS_LABEL = { safe: 'Safe to hold', caution: 'Caution', flag: 'Red flag' };
++
++function renderWatchedCoin(c) {
++  const cls = STATUS_CLS[c.status] || 'mid';
++  const label = c.label || STATUS_LABEL[c.status] || 'Caution';
++  const title = c.symbol ? c.symbol + (c.name ? ' (' + c.name + ')' : '') : short(c.mint);
++  const chartOpen = openCharts.has(c.mint);
++  const chartBtn = h('button', { class: chartOpen ? 'go' : 'go quiet', 'aria-expanded': String(chartOpen) }, chartOpen ? 'Hide chart' : 'Show chart');
++  const unwatchBtn = h('button', { class: 'go quiet' }, 'Unwatch');
++  unwatchBtn.onclick = async () => {
++    openCharts.delete(c.mint);
++    const res = await fetch('/api/watch?mint=' + encodeURIComponent(c.mint), { method: 'DELETE' });
++    const d = await res.json();
++    if (d && Array.isArray(d.coins)) syncWatched(d.coins);
++    await watch();
++  };
++  const makeIframe = () => h('iframe', {
++    class: 'chart-frame',
++    src: 'https://dexscreener.com/solana/' + encodeURIComponent(c.pool || c.mint) + '?embed=1&theme=dark&trades=0&info=0',
++    title: (c.symbol || short(c.mint)) + ' live chart',
++    loading: 'lazy',
++  });
++  const chartWrap = h('div', chartOpen ? { class: 'chart-wrap' } : { class: 'chart-wrap', hidden: '' }, ...(chartOpen ? [makeIframe()] : []));
++  chartBtn.onclick = () => {
++    if (openCharts.has(c.mint)) {
++      openCharts.delete(c.mint);
++      chartWrap.hidden = true;
++      chartWrap.replaceChildren();
++    } else {
++      openCharts.add(c.mint);
++      chartWrap.hidden = false;
++      chartWrap.replaceChildren(makeIframe());
++    }
++    const open = openCharts.has(c.mint);
++    chartBtn.textContent = open ? 'Hide chart' : 'Show chart';
++    chartBtn.className = open ? 'go' : 'go quiet';
++    chartBtn.setAttribute('aria-expanded', String(open));
++  };
++  const scoreTxt = c.score === null || c.score === undefined ? 'unscanned' : c.score + '/100';
++  const priceTxt = c.price_usd === null || c.price_usd === undefined ? 'unknown' : '$' + fmt(c.price_usd, 6);
++  const mcapTxt = c.mcap_usd === null || c.mcap_usd === undefined ? 'unknown' : '$' + fmt(c.mcap_usd);
++  const liqTxt = c.liquidity_usd === null || c.liquidity_usd === undefined ? 'unknown' : '$' + fmt(c.liquidity_usd);
++  const alerts = c.alerts || [];
++  return h('div', { class: 'card' },
++    h('div', { class: 'whead' },
++      h('h2', {}, title),
++      link(c.mint),
++      h('span', { class: 'lv ' + cls }, label),
++      h('div', { class: 'acts' }, chartBtn, unwatchBtn)),
++    h('div', { class: 'wmeta' },
++      h('span', {}, 'Score: ' + scoreTxt),
++      h('span', {}, 'Price: ' + priceTxt),
++      h('span', {}, 'Market cap: ' + mcapTxt),
++      h('span', {}, 'Liquidity: ' + liqTxt)),
++    h('ul', { class: 'wreasons' }, (c.reasons || []).map((r) => h('li', {}, r))),
++    chartWrap,
++    alerts.length
++      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), a.kind, a.wallet ? link(a.wallet) : '', detail(a)]))
++      : h('p', { class: 'mut' }, 'No alerts for this coin yet.'));
++}
++
++async function watch() {
++  const d = await get('/api/watch');
++  const coins = (d && d.coins) || [];
++  syncWatched(coins);
++  const input = h('input', { placeholder: 'Coin mint address', 'aria-label': 'Coin mint address', value: watchInput });
++  const go = h('button', { class: 'go' }, 'Watch coin');
++  const msg = h('p', { class: 'mut' }, 'Watched coins are scanned first on every cycle and monitored for creator sells, tracked-wallet sells, and liquidity drops even if unlisted.');
++  go.onclick = async () => {
++    const m = input.value.trim();
++    if (!B58.test(m)) { msg.textContent = 'That is not a valid Solana mint address.'; return; }
++    watchInput = '';
++    const res = await fetch('/api/watch?mint=' + encodeURIComponent(m), { method: 'POST' });
++    const out = await res.json();
++    if (out && Array.isArray(out.coins)) syncWatched(out.coins);
++    await watch();
++  };
++  put('watch',
++    card('Watch coins',
++      h('p', { class: 'lead' }, 'Pin coins you are holding or watching to track their hold status, red flags, live DexScreener candle chart, and dedicated ping alerts.'),
++      input, ' ', go, msg),
++    ...(coins.length ? coins.map(renderWatchedCoin) : [card('Watched coins', h('p', { class: 'mut' }, 'No coins watched yet. Paste a mint address above or click Watch on any coin in Narratives or Ping.'))]));
++}
++
+ let pingKind = '';
+ async function ping() {
+   const d = await get('/api/ping' + (pingKind ? '?kind=' + encodeURIComponent(pingKind) : ''));
+   const sel = h('select', { 'aria-label': 'Alert kind' }, ['', 'buy', 'sell', 'consensus', 'exit'].map((k) => h('option', { value: k }, k || 'all')));
+   sel.value = pingKind;
+   sel.onchange = () => { pingKind = sel.value; ping(); };
+-  put('ping', card('Wallet activity', sel, d.alerts.length ? table(['Time', 'Kind', 'Coin', 'Wallet', 'Detail'],
+-    d.alerts.map((a) => [when(a.ts), a.kind, a.symbol ? a.symbol + ' ' : '', a.wallet ? link(a.wallet) : '', detail(a)].map((c, i) => (i === 2 ? [c, link(a.mint)] : c))))
++  put('ping', card('Wallet activity', sel, d.alerts.length ? table(['Time', 'Kind', 'Coin', 'Wallet', 'Detail', ''],
++    d.alerts.map((a) => [when(a.ts), a.kind, [a.symbol ? a.symbol + ' ' : '', link(a.mint)], a.wallet ? link(a.wallet) : '', detail(a), watchBtn(a.mint, ping)]))
+     : h('p', { class: 'mut' }, 'No alerts yet.')));
+ }
+ function detail(a) {
+@@ -136,6 +251,8 @@ function detail(a) {
+   if (a.kind === 'consensus') return (d.wallets || []).length + ' wallets, market cap ' + fmt(d.mcap);
+   if (d.usd !== undefined) return '$' + fmt(d.usd);
+   if (d.from !== undefined) return 'liquidity $' + fmt(d.from) + ' to $' + fmt(d.to);
++  if (d.side !== undefined) return 'creator ' + d.side;
++  if (d.vol !== undefined && d.buyers !== undefined) return 'vol $' + fmt(d.vol) + ', buyers ' + fmt(d.buyers);
+   return '';
+ }
+ 
+@@ -269,7 +386,7 @@ function renderRunning(running) {
+       h('span', { class: bi.cls, 'data-l': 'Reading' }, bi.label),
+       h('span', { 'data-l': 'Market cap' }, mcap),
+       h('span', { 'data-l': 'Missing data' }, missingList(r.unknowns)),
+-      btn);
++      h('div', { class: 'acts' }, btn, watchBtn(r.mint, narratives)));
+     const byPart = new Map((r.reasons || []).map((x) => [x.part, x]));
+     const items = Object.keys(PARTS).map((k) => {
+       const p = explainPart(k, byPart.get(k), r.unknowns, r.theme);
+@@ -386,7 +503,7 @@ async function tracer() {
+   put('tracer', card('Tracer', input, ' ', go, msg, t && t.error ? t.error : t ? tracerView(t) : null));
+ }
+ 
+-const TABS = { market, ping, narratives, tracer };
++const TABS = { market, watch, ping, narratives, tracer };
+ let current = 'market';
+ function show(name) {
+   current = name;

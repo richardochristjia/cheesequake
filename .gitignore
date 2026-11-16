@@ -2,5 +2,6 @@ data/*.db*
 wallets.txt
 .lavish/
 node_modules/
+public/dist/
 wallets*.txt
 !wallets.example.txt

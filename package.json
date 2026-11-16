@@ -4,7 +4,12 @@
   "description": "Local Solana memecoin scanner with a dashboard",
   "type": "module",
   "bin": { "cheesequake": "src/main.js" },
-  "scripts": { "start": "node src/main.js", "test": "node --test" },
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "test": "node --test test/*.test.js && npm --prefix client test"
+  },
   "engines": { "node": ">=22.13" },
   "license": "MIT"
 }
