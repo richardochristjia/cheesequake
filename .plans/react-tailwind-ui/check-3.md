@@ -1,0 +1,1 @@
+- Plan holds against `src/market.js:55` and `public/index.html:150-381`: zone bands are `[0,20) Cold`, `[20,40) Cool`, `[40,60) Neutral`, `[60,80) Hot`, `[80,100] Euphoria`; Watch card state preserves open DexScreener iframes via `key={coin.mint}` and `chartOpen` inside `WatchCard`; Ping filters compose `kind` + `wallet` query params and sync shared `watchedSet`.

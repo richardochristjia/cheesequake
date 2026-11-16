@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Card } from './components/ui';
+import { Market } from './pages/Market';
+import { Ping } from './pages/Ping';
+import { Watch } from './pages/Watch';
 import type { TabId, WatchCoin, WatchResponse } from './types';
 
 export default function App() {
@@ -71,13 +74,24 @@ export default function App() {
       refreshing={refreshing}
       onRefresh={triggerRefresh}
     >
-      <Card title={activeTab[0].toUpperCase() + activeTab.slice(1)}>
-        <p className="text-sm text-[#9c8f80]">
-          View pending implementation (refresh #{refreshTick}, watched:{' '}
-          {watchedSet.size}).
-        </p>
-      </Card>
-      <button type="button" className="hidden" onClick={() => void toggleWatch('')} />
+      {activeTab === 'market' && <Market refreshTick={refreshTick} />}
+      {activeTab === 'watch' && (
+        <Watch refreshTick={refreshTick} onSyncWatched={syncWatched} />
+      )}
+      {activeTab === 'ping' && (
+        <Ping
+          refreshTick={refreshTick}
+          watchedSet={watchedSet}
+          onToggleWatch={toggleWatch}
+        />
+      )}
+      {(activeTab === 'narratives' || activeTab === 'tracer') && (
+        <Card title={activeTab[0].toUpperCase() + activeTab.slice(1)}>
+          <p className="text-sm text-[#9c8f80]">
+            View pending Phase 4 implementation.
+          </p>
+        </Card>
+      )}
     </Layout>
   );
 }

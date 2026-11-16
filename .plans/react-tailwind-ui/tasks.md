@@ -9,9 +9,9 @@
 - [x] Build `App.tsx`, `Layout.tsx` (custom SVG emblem, 5-tab accessible `tablist` with icons, 30s auto-refresh), and shared UI primitives (`KindTooltip.tsx`, `EmptyState.tsx`, `lib/format.ts`, `lib/glossary.ts`, `types.ts`)
 
 ## Phase 3: Market, Watch & Ping Views
-- [ ] Implement `Market.tsx` and interactive `TrenchChart.tsx` SVG with 5 zone bands and hover crosshair tooltip
-- [ ] Implement `Watch.tsx` with Base58 validation, keyed `WatchCard` preserving lazy DexScreener iframes across refreshes, and `KIND_INFO` alert table
-- [ ] Implement `Ping.tsx` with alert kind and wallet filters, consensus wallet labels, `KIND_INFO` tooltips, and shared Watch toggles
+- [x] Implement `Market.tsx` and interactive `TrenchChart.tsx` SVG with 5 zone bands and hover crosshair tooltip
+- [x] Implement `Watch.tsx` with Base58 validation, keyed `WatchCard` preserving lazy DexScreener iframes across refreshes, and `KIND_INFO` alert table
+- [x] Implement `Ping.tsx` with alert kind and wallet filters, consensus wallet labels, `KIND_INFO` tooltips, and shared Watch toggles
 
 ## Phase 4: Narratives & Tracer Views
 - [ ] Implement `Narratives.tsx` with expandable plain-English score breakdowns + progress bars, theme share bars with top-5 toggle, wallet scorecard, and calibration table
