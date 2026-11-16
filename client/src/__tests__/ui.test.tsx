@@ -468,4 +468,64 @@ describe('Cheesequake UI', () => {
     fireEvent.click(binanceNode);
     expect(screen.getByText(/Incoming transfers: 1/)).toBeInTheDocument();
   });
+
+  it('applies glass-input, glass-select, and unified min-h-[44px] px-3.5 py-2 button classes across Watch, Tracer, and Ping', async () => {
+    const mint = addr('M');
+    const wallet = addr('W');
+    globalThis.fetch = mockFetch({
+      watch: () => ({
+        ok: true,
+        coins: [
+          {
+            mint,
+            symbol: 'GLSS',
+            name: 'Glass',
+            pool: addr('P'),
+            status: 'safe',
+            label: 'Safe to hold',
+            score: 85,
+            price_usd: 0.05,
+            mcap_usd: 100000,
+            liquidity_usd: 50000,
+            reasons: ['All good'],
+            alerts: [],
+          },
+        ],
+      }),
+      ping: () => ({
+        alerts: [
+          { ts: 1700000000, kind: 'buy', mint, symbol: 'GLSS', wallet, detail: { usd: 100 } },
+        ],
+        wallets: [{ address: wallet, label: 'alpha' }],
+      }),
+    });
+
+    render(<App />);
+
+    // Watch tab: mint input + Show chart / Hide chart + Unwatch
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+    const showChartBtn = await screen.findByRole('button', { name: 'Show chart' });
+    expect(showChartBtn).toHaveClass('min-h-[44px]', 'px-3.5', 'py-2');
+    fireEvent.click(showChartBtn);
+    const hideChartBtn = screen.getByRole('button', { name: 'Hide chart' });
+    expect(hideChartBtn).toHaveClass('min-h-[44px]', 'px-3.5', 'py-2');
+    const unwatchBtn = screen.getByRole('button', { name: 'Unwatch' });
+    expect(unwatchBtn).toHaveClass('min-h-[44px]', 'px-3.5', 'py-2');
+    const mintInput = screen.getByLabelText('Coin mint address');
+    expect(mintInput).toHaveClass('glass-input', 'min-h-[44px]');
+
+    // Ping tab: selects + WatchButton
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    const kindSelect = await screen.findByLabelText('Alert kind');
+    const walletSelect = screen.getByLabelText('Wallet');
+    expect(kindSelect).toHaveClass('glass-input', 'glass-select', 'min-h-[44px]');
+    expect(walletSelect).toHaveClass('glass-input', 'glass-select', 'min-h-[44px]');
+    const watchBtn = await screen.findByRole('button', { name: 'Watching' });
+    expect(watchBtn).toHaveClass('min-h-[44px]', 'px-3.5', 'py-2');
+
+    // Tracer tab: start wallet input
+    fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));
+    const tracerInput = screen.getByLabelText('Start wallet address');
+    expect(tracerInput).toHaveClass('glass-input', 'min-h-[44px]');
+  });
 });

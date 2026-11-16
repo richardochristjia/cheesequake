@@ -53,7 +53,7 @@ export function Tracer({ refreshTick }: { refreshTick: number }) {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Start wallet address"
           aria-label="Start wallet address"
-          className="w-full max-w-md rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
+          className="glass-input min-h-[44px] w-full max-w-md rounded-lg px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
         />
         <button
           type="submit"

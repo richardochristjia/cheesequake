@@ -76,7 +76,7 @@ function WatchCard({
             type="button"
             aria-expanded={chartOpen}
             onClick={() => setChartOpen((o) => !o)}
-            className={`min-h-[36px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`min-h-[44px] rounded-lg px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${
               chartOpen
                 ? 'bg-[#e59a28] text-[#110e0b]'
                 : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
@@ -87,7 +87,7 @@ function WatchCard({
           <button
             type="button"
             onClick={() => onUnwatch(coin.mint)}
-            className="min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3 py-1.5 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
+            className="min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
           >
             Unwatch
           </button>
@@ -236,7 +236,7 @@ export function Watch({
             onChange={(e) => setMintInput(e.target.value)}
             placeholder="Coin mint address"
             aria-label="Coin mint address"
-            className="w-full max-w-md rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
+            className="glass-input min-h-[44px] w-full max-w-md rounded-lg px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
           />
           <button
             type="submit"

@@ -56,12 +56,12 @@ body {
 .glass-header {
   background: linear-gradient(
     155deg,
-    rgba(255, 248, 238, 0.09) 0%,
-    rgba(44, 35, 27, 0.68) 45%,
-    rgba(22, 18, 14, 0.84) 100%
+    rgba(36, 29, 23, 0.88) 0%,
+    rgba(26, 21, 17, 0.91) 45%,
+    rgba(17, 14, 11, 0.94) 100%
   );
-  backdrop-filter: blur(22px) saturate(145%);
-  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
   border-bottom: 1px solid rgba(244, 237, 226, 0.14);
   box-shadow:
     inset 0 1px 0 rgba(255, 248, 238, 0.14),
@@ -71,21 +71,44 @@ body {
 .glass-card {
   background: linear-gradient(
     145deg,
-    rgba(255, 248, 238, 0.11) 0%,
-    rgba(56, 46, 36, 0.56) 38%,
-    rgba(30, 24, 19, 0.72) 100%
+    rgba(255, 248, 238, 0.065) 0%,
+    rgba(36, 29, 23, 0.58) 38%,
+    rgba(20, 16, 13, 0.72) 100%
   );
-  backdrop-filter: blur(22px) saturate(145%);
-  -webkit-backdrop-filter: blur(22px) saturate(145%);
-  border: 1px solid rgba(244, 237, 226, 0.14);
-  border-top-color: rgba(255, 248, 238, 0.24);
-  border-left-color: rgba(255, 248, 238, 0.18);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(244, 237, 226, 0.12);
+  border-top-color: rgba(255, 248, 238, 0.18);
+  border-left-color: rgba(255, 248, 238, 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(255, 248, 238, 0.22),
-    inset 1px 0 0 rgba(255, 248, 238, 0.1),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
-    0 18px 42px -12px rgba(4, 3, 2, 0.72),
-    0 4px 12px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 248, 238, 0.16),
+    0 18px 42px -12px rgba(4, 3, 2, 0.68),
+    0 4px 12px rgba(0, 0, 0, 0.32);
+}
+
+.glass-input {
+  min-height: 44px;
+  background: rgba(17, 14, 11, 0.56);
+  backdrop-filter: blur(16px) saturate(135%);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  border: 1px solid rgba(244, 237, 226, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 238, 0.08);
+  color: var(--fg);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.glass-input:focus {
+  border-color: rgba(229, 154, 40, 0.65);
+  background: rgba(17, 14, 11, 0.72);
+}
+
+.glass-select {
+  cursor: pointer;
+}
+
+.glass-select option {
+  background-color: #191511;
+  color: #f4ede2;
 }
 
 :focus-visible {

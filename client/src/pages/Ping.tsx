@@ -61,7 +61,7 @@ export function Ping({
           aria-label="Alert kind"
           value={kind}
           onChange={(e) => setKind(e.target.value)}
-          className="min-h-[44px] rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2]"
+          className="glass-input glass-select min-h-[44px] rounded-lg px-3 py-2 text-sm text-[#f4ede2]"
         >
           {KINDS.map((k) => (
             <option key={k.value} value={k.value}>
@@ -74,7 +74,7 @@ export function Ping({
           aria-label="Wallet"
           value={wallet}
           onChange={(e) => setWallet(e.target.value)}
-          className="min-h-[44px] rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2]"
+          className="glass-input glass-select min-h-[44px] rounded-lg px-3 py-2 text-sm text-[#f4ede2]"
         >
           <option value="">all wallets</option>
           {(data?.wallets || []).map((w) => (

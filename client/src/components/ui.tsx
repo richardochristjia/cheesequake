@@ -155,7 +155,7 @@ export function WatchButton({
       type="button"
       aria-pressed={watched}
       onClick={() => onToggle(mint)}
-      className={`min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+      className={`min-h-[44px] px-3.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
         watched
           ? 'bg-[#e59a28] text-[#110e0b] hover:bg-[#e59a28]/90'
           : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
