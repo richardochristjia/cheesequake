@@ -87,7 +87,7 @@ function WatchCard({
           <button
             type="button"
             onClick={() => onUnwatch(coin.mint)}
-            className="min-h-[36px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3 py-1.5 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
+            className="min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3 py-1.5 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
           >
             Unwatch
           </button>
