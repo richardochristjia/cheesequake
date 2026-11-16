@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   AddressLink,
   Badge,
@@ -74,6 +74,47 @@ export function Narratives({
     data.calibration.missed ? ` Missed: ${data.calibration.missed}.` : ''
   }`;
 
+  const renderBreakdown = (r: NarrativesResponse['running'][number]) => {
+    const byPart = new Map((r.reasons || []).map((x) => [x.part, x]));
+    return (
+      <div className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-4">
+        <ul className="divide-y divide-[#2d251d]/70">
+          {Object.keys(PARTS).map((k) => {
+            const p = explainPart(k, byPart.get(k), r.unknowns, r.theme);
+            const pct =
+              p.max > 0 ? Math.min(100, Math.round((p.points / p.max) * 100)) : 0;
+            return (
+              <li
+                key={k}
+                className="grid grid-cols-1 sm:grid-cols-[84px_minmax(0,1fr)_auto] gap-3 items-start py-2.5 first:pt-0 last:pb-0"
+              >
+                <Badge tone={p.cls}>{p.level}</Badge>
+                <div>
+                  <strong className="block text-sm font-medium text-[#f4ede2]">
+                    {p.name}
+                  </strong>
+                  <p className="text-xs text-[#9c8f80] mt-0.5">{p.text}</p>
+                  <div className="mt-1.5 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-[#110e0b]">
+                    <div
+                      className="h-full rounded-full bg-[#e59a28]"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="text-xs text-[#9c8f80] whitespace-nowrap tabular-nums">
+                  {p.points} of {p.max}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-3 text-xs text-[#9c8f80]">
+          Missing data counts as 0 points and caps the score at 79.
+        </p>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <Card
@@ -85,151 +126,99 @@ export function Narratives({
             Nothing has passed every safety check in the last 30 minutes.
           </p>
         ) : (
-          <div className="space-y-2">
-            <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_64px_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_auto] gap-3 pb-2 border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
-              <span>Coin</span>
-              <span>Theme</span>
-              <span>Score</span>
-              <span>Reading</span>
-              <span>Market cap</span>
-              <span>Missing data</span>
-              <span></span>
-            </div>
-
-            {data.running.map((r) => {
-              const isOpen = openMints.has(r.mint);
-              const bi = bandInfo(r.band);
-              const mcap =
-                r.mcap_usd === null || r.mcap_usd === undefined
-                  ? 'unknown'
-                  : `$${fmt(r.mcap_usd)}`;
-              const byPart = new Map((r.reasons || []).map((x) => [x.part, x]));
-
-              return (
-                <div
-                  key={r.mint}
-                  className="border-b border-[#2d251d]/70 pb-3 pt-1"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_64px_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.5fr)_auto] gap-3 items-center py-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {r.symbol ? (
-                        <>
-                          <strong className="text-sm font-semibold text-[#f4ede2] truncate">
-                            {r.symbol}
-                          </strong>
-                          <AddressLink address={r.mint} />
-                        </>
-                      ) : (
-                        <strong className="text-sm font-semibold text-[#f4ede2]">
-                          <AddressLink address={r.mint} />
-                        </strong>
-                      )}
-                    </div>
-
-                    <div className="text-sm text-[#f4ede2]/90">
-                      <span className="md:hidden text-xs text-[#9c8f80] mr-1.5">
-                        Theme:
-                      </span>
-                      {r.theme || 'no theme'}
-                    </div>
-
-                    <div className="text-lg font-semibold text-[#f4ede2] tabular-nums">
-                      <span className="md:hidden text-xs font-normal text-[#9c8f80] mr-1.5">
-                        Score:
-                      </span>
-                      {r.score}
-                    </div>
-
-                    <div className={`text-sm font-medium ${TONE_TEXT[bi.cls]}`}>
-                      <span className="md:hidden text-xs text-[#9c8f80] mr-1.5">
-                        Reading:
-                      </span>
-                      {bi.label}
-                    </div>
-
-                    <div className="text-sm text-[#f4ede2]/90 tabular-nums">
-                      <span className="md:hidden text-xs text-[#9c8f80] mr-1.5">
-                        Market cap:
-                      </span>
-                      {mcap}
-                    </div>
-
-                    <div className="text-xs text-[#9c8f80] break-words">
-                      <span className="md:hidden mr-1.5">Missing data:</span>
-                      {missingList(r.unknowns)}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        aria-expanded={isOpen}
-                        onClick={() => toggleMint(r.mint)}
-                        className={`min-h-[36px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                          isOpen
-                            ? 'bg-[#e59a28] text-[#110e0b]'
-                            : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
-                        }`}
-                      >
-                        {isOpen ? 'Hide' : 'Explain score'}
-                      </button>
-                      <WatchButton
-                        mint={r.mint}
-                        watched={watchedSet.has(r.mint)}
-                        onToggle={onToggleWatch}
-                      />
-                    </div>
-                  </div>
-
-                  {isOpen && (
-                    <div className="mt-2 rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-4">
-                      <ul className="divide-y divide-[#2d251d]/70">
-                        {Object.keys(PARTS).map((k) => {
-                          const p = explainPart(
-                            k,
-                            byPart.get(k),
-                            r.unknowns,
-                            r.theme,
-                          );
-                          const pct =
-                            p.max > 0
-                              ? Math.min(100, Math.round((p.points / p.max) * 100))
-                              : 0;
-                          return (
-                            <li
-                              key={k}
-                              className="grid grid-cols-1 sm:grid-cols-[84px_minmax(0,1fr)_auto] gap-3 items-start py-2.5 first:pt-0 last:pb-0"
-                            >
-                              <Badge tone={p.cls}>{p.level}</Badge>
-                              <div>
-                                <strong className="block text-sm font-medium text-[#f4ede2]">
-                                  {p.name}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                  <th className="py-2.5 pr-4 text-left">Coin</th>
+                  <th className="py-2.5 px-3 text-left">Theme</th>
+                  <th className="py-2.5 px-3 text-right">Score</th>
+                  <th className="py-2.5 px-3 text-left">Reading</th>
+                  <th className="py-2.5 px-3 text-right">Market cap</th>
+                  <th className="py-2.5 px-3 text-left">Missing data</th>
+                  <th className="py-2.5 pl-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#2d251d]/70">
+                {data.running.map((r) => {
+                  const isOpen = openMints.has(r.mint);
+                  const bi = bandInfo(r.band);
+                  const mcap =
+                    r.mcap_usd === null || r.mcap_usd === undefined
+                      ? 'unknown'
+                      : `$${fmt(r.mcap_usd)}`;
+                  return (
+                    <Fragment key={r.mint}>
+                      <tr className="hover:bg-[#211c16]/40 transition-colors">
+                        <td className="py-3 pr-4 align-middle whitespace-nowrap">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {r.symbol ? (
+                              <>
+                                <strong className="font-semibold text-[#f4ede2]">
+                                  {r.symbol}
                                 </strong>
-                                <p className="text-xs text-[#9c8f80] mt-0.5">
-                                  {p.text}
-                                </p>
-                                <div className="mt-1.5 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-[#110e0b]">
-                                  <div
-                                    className="h-full rounded-full bg-[#e59a28]"
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                              </div>
-                              <span className="text-xs text-[#9c8f80] whitespace-nowrap tabular-nums">
-                                {p.points} of {p.max}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <p className="mt-3 text-xs text-[#9c8f80]">
-                        Missing data counts as 0 points and caps the score at
-                        79.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                                <AddressLink address={r.mint} />
+                              </>
+                            ) : (
+                              <strong className="font-semibold text-[#f4ede2]">
+                                <AddressLink address={r.mint} />
+                              </strong>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 align-middle text-[#f4ede2]/90 whitespace-nowrap">
+                          {r.theme || (
+                            <span className="text-[#9c8f80]">no theme</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 align-middle text-right text-base font-semibold text-[#f4ede2] tabular-nums whitespace-nowrap">
+                          {r.score}
+                        </td>
+                        <td
+                          className={`py-3 px-3 align-middle font-medium whitespace-nowrap ${TONE_TEXT[bi.cls]}`}
+                        >
+                          {bi.label}
+                        </td>
+                        <td className="py-3 px-3 align-middle text-right text-[#f4ede2]/90 tabular-nums whitespace-nowrap">
+                          {mcap}
+                        </td>
+                        <td className="py-3 px-3 align-middle text-xs text-[#9c8f80] max-w-[240px]">
+                          {missingList(r.unknowns)}
+                        </td>
+                        <td className="py-3 pl-3 align-middle text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              aria-expanded={isOpen}
+                              onClick={() => toggleMint(r.mint)}
+                              className={`min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                                isOpen
+                                  ? 'bg-[#e59a28] text-[#110e0b]'
+                                  : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
+                              }`}
+                            >
+                              {isOpen ? 'Hide' : 'Explain score'}
+                            </button>
+                            <WatchButton
+                              mint={r.mint}
+                              watched={watchedSet.has(r.mint)}
+                              onToggle={onToggleWatch}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={7} className="pb-4 pt-1">
+                            {renderBreakdown(r)}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>
@@ -242,49 +231,57 @@ export function Narratives({
           <p className="text-sm text-[#9c8f80]">No themes yet.</p>
         ) : (
           <div>
-            <div className="grid grid-cols-[minmax(0,1.2fr)_64px_minmax(0,1fr)_minmax(0,1fr)] gap-3 pb-2 border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
-              <span>Word</span>
-              <span>Coins</span>
-              <span>Traded, 1 h</span>
-              <span>Share</span>
-            </div>
-            <div className="divide-y divide-[#2d251d]/70">
-              {visibleThemes.map((t) => {
-                const sharePct = Math.min(100, Math.max(0, t.share * 100));
-                return (
-                  <div
-                    key={t.keyword}
-                    className="grid grid-cols-[minmax(0,1.2fr)_64px_minmax(0,1fr)_minmax(0,1fr)] gap-3 items-center py-2.5 text-sm"
-                  >
-                    <span className="font-medium text-[#f4ede2] truncate">
-                      {t.keyword}
-                    </span>
-                    <span className="tabular-nums text-[#f4ede2]/90">
-                      {t.tokens}
-                    </span>
-                    <span className="tabular-nums text-[#f4ede2]/90">
-                      ${fmt(t.volume)}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <div className="hidden sm:block h-1.5 w-16 overflow-hidden rounded-full bg-[#110e0b]">
-                        <div
-                          className="h-full rounded-full bg-[#e59a28]"
-                          style={{ width: `${sharePct}%` }}
-                        />
-                      </div>
-                      <span className="tabular-nums text-xs text-[#9c8f80]">
-                        {fmt(t.share * 100, 1)}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                    <th className="py-2.5 pr-4 text-left">Word</th>
+                    <th className="py-2.5 px-3 text-right w-24">Coins</th>
+                    <th className="py-2.5 px-3 text-right">Traded, 1 h</th>
+                    <th className="py-2.5 pl-3 text-right">Share</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#2d251d]/70">
+                  {visibleThemes.map((t) => {
+                    const sharePct = Math.min(100, Math.max(0, t.share * 100));
+                    return (
+                      <tr
+                        key={t.keyword}
+                        className="hover:bg-[#211c16]/40 transition-colors"
+                      >
+                        <td className="py-2.5 pr-4 font-medium text-[#f4ede2]">
+                          {t.keyword}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
+                          {t.tokens}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
+                          ${fmt(t.volume)}
+                        </td>
+                        <td className="py-2.5 pl-3 text-right">
+                          <div className="inline-flex items-center justify-end gap-2.5">
+                            <div className="hidden sm:block h-1.5 w-20 overflow-hidden rounded-full bg-[#110e0b]">
+                              <div
+                                className="h-full rounded-full bg-[#e59a28]"
+                                style={{ width: `${sharePct}%` }}
+                              />
+                            </div>
+                            <span className="tabular-nums text-xs text-[#9c8f80] w-12 text-right">
+                              {fmt(t.share * 100, 1)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             {themes.length > 5 && (
               <button
                 type="button"
                 onClick={() => setShowAllThemes((s) => !s)}
-                className="mt-3 min-h-[36px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3 py-1.5 text-xs font-medium text-[#f4ede2] hover:border-[#e59a28]/50 transition-colors cursor-pointer"
+                className="mt-3 min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#e59a28]/50 transition-colors cursor-pointer"
               >
                 {showAllThemes
                   ? 'Show top 5'
@@ -307,42 +304,63 @@ export function Narratives({
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#9c8f80]">
-                  <th className="py-2 pr-3">Wallet</th>
-                  <th className="py-2 pr-3">Class</th>
-                  <th className="py-2 pr-3">Bought</th>
-                  <th className="py-2 pr-3">Win rate</th>
-                  <th className="py-2 pr-3">Median hold (s)</th>
-                  <th className="py-2">Still holding</th>
+                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                  <th className="py-2.5 pr-4 text-left">Wallet</th>
+                  <th className="py-2.5 px-3 text-left">Class</th>
+                  <th className="py-2.5 px-3 text-right">Bought</th>
+                  <th className="py-2.5 px-3 text-right">Win rate</th>
+                  <th className="py-2.5 px-3 text-right">Median hold (s)</th>
+                  <th className="py-2.5 pl-3 text-right">Still holding</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2d251d]/70">
                 {data.wallets.map((w) => (
-                  <tr key={w.address}>
-                    <td className="py-2 pr-3">
+                  <tr
+                    key={w.address}
+                    className="hover:bg-[#211c16]/40 transition-colors"
+                  >
+                    <td className="py-2.5 pr-4 whitespace-nowrap">
                       <WalletDisplay address={w.address} label={w.label} />
                     </td>
-                    <td className="py-2 pr-3 text-xs text-[#f4ede2]/90">
+                    <td className="py-2.5 px-3 text-xs text-[#f4ede2]/90 whitespace-nowrap">
                       {w.class}
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-xs text-[#f4ede2]/90">
+                    <td className="py-2.5 px-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
                       {w.bought}
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-xs text-[#f4ede2]/90">
-                      {w.winRate === null
-                        ? 'not enough trades yet'
-                        : `${fmt(w.winRate * 100)}%`}
+                    <td className="py-2.5 px-3 text-right tabular-nums text-sm whitespace-nowrap">
+                      {w.winRate === null ? (
+                        <span className="text-xs italic text-[#9c8f80]">
+                          not enough trades yet
+                        </span>
+                      ) : (
+                        <span className="text-[#f4ede2]/90">
+                          {fmt(w.winRate * 100)}%
+                        </span>
+                      )}
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-xs text-[#f4ede2]/90">
+                    <td className="py-2.5 px-3 text-right tabular-nums text-sm whitespace-nowrap">
                       {w.medianHoldSeconds === null ||
-                      w.medianHoldSeconds === undefined
-                        ? 'not enough trades yet'
-                        : fmt(w.medianHoldSeconds)}
+                      w.medianHoldSeconds === undefined ? (
+                        <span className="text-xs italic text-[#9c8f80]">
+                          not enough trades yet
+                        </span>
+                      ) : (
+                        <span className="text-[#f4ede2]/90">
+                          {fmt(w.medianHoldSeconds)}
+                        </span>
+                      )}
                     </td>
-                    <td className="py-2 tabular-nums text-xs text-[#f4ede2]/90">
-                      {w.stillHoldingShare === null
-                        ? 'not enough trades yet'
-                        : `${fmt(w.stillHoldingShare * 100)}%`}
+                    <td className="py-2.5 pl-3 text-right tabular-nums text-sm whitespace-nowrap">
+                      {w.stillHoldingShare === null ? (
+                        <span className="text-xs italic text-[#9c8f80]">
+                          not enough trades yet
+                        </span>
+                      ) : (
+                        <span className="text-[#f4ede2]/90">
+                          {fmt(w.stillHoldingShare * 100)}%
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -362,30 +380,41 @@ export function Narratives({
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#9c8f80]">
-                  <th className="py-2 pr-3">Band</th>
-                  <th className="py-2 pr-3">Horizon</th>
-                  <th className="py-2 pr-3">Count</th>
-                  <th className="py-2 pr-3">Mean change</th>
-                  <th className="py-2">Share up</th>
+                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                  <th className="py-2.5 pr-4 text-left">Band</th>
+                  <th className="py-2.5 px-3 text-right">Horizon</th>
+                  <th className="py-2.5 px-3 text-right">Count</th>
+                  <th className="py-2.5 px-3 text-right">Mean change</th>
+                  <th className="py-2.5 pl-3 text-right">Share up</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2d251d]/70">
                 {data.calibration.rows.map((r, idx) => (
-                  <tr key={`${r.band}-${r.horizon_h}-${idx}`}>
-                    <td className="py-2 pr-3 font-medium text-[#f4ede2]">
+                  <tr
+                    key={`${r.band}-${r.horizon_h}-${idx}`}
+                    className="hover:bg-[#211c16]/40 transition-colors"
+                  >
+                    <td className="py-2.5 pr-4 font-medium text-[#f4ede2] whitespace-nowrap">
                       {bandInfo(r.band).label}
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-xs text-[#9c8f80]">
+                    <td className="py-2.5 px-3 text-right tabular-nums text-xs text-[#9c8f80] whitespace-nowrap">
                       {r.horizon_h} h
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-xs text-[#f4ede2]/90">
+                    <td className="py-2.5 px-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
                       {r.count}
                     </td>
-                    <td className="py-2 pr-3 tabular-nums text-xs text-[#f4ede2]/90">
+                    <td
+                      className={`py-2.5 px-3 text-right tabular-nums text-sm font-medium whitespace-nowrap ${
+                        r.meanChangePct > 0
+                          ? 'text-[#5cd093]'
+                          : r.meanChangePct < 0
+                            ? 'text-[#fb7185]'
+                            : 'text-[#f4ede2]/90'
+                      }`}
+                    >
                       {fmt(r.meanChangePct, 1)}%
                     </td>
-                    <td className="py-2 tabular-nums text-xs text-[#f4ede2]/90">
+                    <td className="py-2.5 pl-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
                       {fmt(r.positiveShare * 100)}%
                     </td>
                   </tr>
