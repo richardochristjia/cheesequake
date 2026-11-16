@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { B58, short, type Tone } from '../lib/format';
 import type { AlertItem } from '../types';
 
@@ -138,6 +138,51 @@ export function AlertWalletDisplay({ alert }: { alert: AlertItem }) {
     );
   }
   return null;
+}
+
+export function TokenAvatar({
+  imageUrl,
+  symbol,
+  mint,
+  size = 'md',
+}: {
+  imageUrl?: string | null;
+  symbol?: string | null;
+  mint: string;
+  size?: 'sm' | 'md';
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [imageUrl]);
+
+  const dims = size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-9 w-9 text-xs';
+  const monogram =
+    (symbol || mint)
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 2)
+      .toUpperCase() || '?';
+
+  if (imageUrl && !imgError) {
+    return (
+      <img
+        src={imageUrl}
+        alt={symbol || short(mint)}
+        onError={() => setImgError(true)}
+        className={`${dims} shrink-0 rounded-full border border-[#2d251d] bg-[#211c16] object-cover`}
+      />
+    );
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className={`flex ${dims} shrink-0 items-center justify-center rounded-full border border-[#2d251d] bg-[#211c16] font-semibold text-[#e59a28]`}
+    >
+      {monogram}
+    </div>
+  );
 }
 
 export function WatchButton({

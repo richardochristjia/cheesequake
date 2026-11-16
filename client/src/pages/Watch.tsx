@@ -1,9 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  Activity,
+  Coins,
+  DollarSign,
+  Droplets,
+  Gauge,
+} from 'lucide-react';
+import {
   AddressLink,
   AlertWalletDisplay,
   Badge,
   Card,
+  TokenAvatar,
 } from '../components/ui';
 import { EmptyState } from '../components/EmptyState';
 import { KindTooltip } from '../components/KindTooltip';
@@ -29,17 +37,6 @@ function WatchCard({
   onUnwatch: (mint: string) => void;
 }) {
   const [chartOpen, setChartOpen] = useState(false);
-  const [imgError, setImgError] = useState(false);
-
-  useEffect(() => {
-    setImgError(false);
-  }, [coin.image_url]);
-
-  const monogram =
-    (coin.symbol || coin.mint)
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .slice(0, 2)
-      .toUpperCase() || '?';
 
   const tone = STATUS_TONE[coin.status] || 'mid';
   const label = coin.label || STATUS_LABEL[coin.status] || 'Caution';
@@ -71,11 +68,11 @@ function WatchCard({
       : `$${fmt(coin.vol_h24)}`;
 
   const stats = [
-    { label: 'Score', value: scoreTxt },
-    { label: 'Price', value: priceTxt },
-    { label: 'Market cap', value: mcapTxt },
-    { label: 'Liquidity', value: liqTxt },
-    { label: '24h Volume', value: volTxt },
+    { label: 'Score', value: scoreTxt, Icon: Gauge },
+    { label: 'Price', value: priceTxt, Icon: DollarSign },
+    { label: 'Market cap', value: mcapTxt, Icon: Coins },
+    { label: 'Liquidity', value: liqTxt, Icon: Droplets },
+    { label: '24h Volume', value: volTxt, Icon: Activity },
   ];
 
   const borderTone =
@@ -89,21 +86,12 @@ function WatchCard({
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2.5">
-          {coin.image_url && !imgError ? (
-            <img
-              src={coin.image_url}
-              alt={coin.symbol || short(coin.mint)}
-              onError={() => setImgError(true)}
-              className="h-9 w-9 shrink-0 rounded-full border border-[#2d251d] bg-[#211c16] object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#2d251d] bg-[#211c16] text-xs font-semibold text-[#e59a28]"
-            >
-              {monogram}
-            </div>
-          )}
+          <TokenAvatar
+            imageUrl={coin.image_url}
+            symbol={coin.symbol}
+            mint={coin.mint}
+            size="md"
+          />
           <h3 className="text-base font-semibold text-[#f4ede2]">{title}</h3>
           <AddressLink address={coin.mint} />
           <Badge tone={tone}>{label}</Badge>
@@ -145,14 +133,20 @@ function WatchCard({
       </div>
 
       <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 tabular-nums">
-        {stats.map((s) => (
+        {stats.map(({ label: statLabel, value, Icon }) => (
           <div
-            key={s.label}
-            className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 px-3 py-2"
+            key={statLabel}
+            className="rounded-lg border border-white/15 bg-white/[0.07] px-3 py-2"
           >
-            <div className="text-xs text-[#cfc3b4]">{s.label}</div>
-            <div className="mt-0.5 truncate text-sm font-medium text-[#f4ede2]">
-              {s.value}
+            <div className="flex items-center gap-1.5 text-xs text-[#cfc3b4]">
+              <Icon
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 text-[#e59a28]"
+              />
+              <span>{statLabel}</span>
+            </div>
+            <div className="mt-1 truncate text-sm font-medium text-[#f4ede2]">
+              {value}
             </div>
           </div>
         ))}

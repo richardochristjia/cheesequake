@@ -158,7 +158,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 export function runningNow(db, now) {
   const since = Math.floor(now / 1000) - 1800;
   return db.prepare(
-    `SELECT c.*, t.symbol, t.name, tt.keyword AS theme FROM candidates c
+    `SELECT c.*, t.symbol, t.name, t.image_url, tt.keyword AS theme FROM candidates c
      JOIN (SELECT mint, MAX(id) id FROM candidates WHERE ts > ? GROUP BY mint) l ON l.id = c.id
      LEFT JOIN tokens t ON t.mint = c.mint LEFT JOIN token_theme tt ON tt.mint = c.mint
      WHERE c.listed = 1

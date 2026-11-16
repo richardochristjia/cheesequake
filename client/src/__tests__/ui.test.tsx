@@ -606,4 +606,78 @@ describe('Cheesequake UI', () => {
     expect(screen.queryByRole('img', { name: 'GOOD' })).not.toBeInTheDocument();
     expect(screen.getByText('GO')).toBeInTheDocument();
   });
+
+  it('Narratives and Ping render TokenAvatar images and monogram fallbacks', async () => {
+    const mImg = addr('I');
+    const mFallback = addr('F');
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        themes: [],
+        running: [
+          {
+            mint: mImg,
+            symbol: 'IMG',
+            name: 'Image Coin',
+            image_url: 'https://cdn.example/img.png',
+            theme: null,
+            score: 80,
+            band: 'strong',
+            mcap_usd: 100000,
+            reasons: [],
+            unknowns: [],
+          },
+          {
+            mint: mFallback,
+            symbol: 'FBK',
+            name: 'Fallback Coin',
+            image_url: null,
+            theme: null,
+            score: 60,
+            band: 'watch',
+            mcap_usd: 50000,
+            reasons: [],
+            unknowns: [],
+          },
+        ],
+        wallets: [],
+        calibration: { rows: [], total: 0, pending: 0, missed: 0 },
+      }),
+      ping: () => ({
+        alerts: [
+          {
+            ts: 1700000000,
+            kind: 'buy',
+            mint: mImg,
+            wallet: addr('W'),
+            symbol: 'IMG',
+            image_url: 'https://cdn.example/img.png',
+            detail: { usd: 500 },
+          },
+          {
+            ts: 1700000010,
+            kind: 'buy',
+            mint: mFallback,
+            wallet: addr('W'),
+            symbol: 'FBK',
+            image_url: null,
+            detail: { usd: 250 },
+          },
+        ],
+        wallets: [],
+      }),
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    await waitFor(() => {
+      expect(screen.getAllByRole('img', { name: 'IMG' }).length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.getAllByText('FB').length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    await waitFor(() => {
+      expect(screen.getAllByRole('img', { name: 'IMG' }).length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.getAllByText('FB').length).toBeGreaterThanOrEqual(1);
+  });
 });

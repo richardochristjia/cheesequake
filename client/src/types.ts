@@ -28,6 +28,7 @@ export interface AlertItem {
   wallet_label?: string | null;
   symbol?: string | null;
   name?: string | null;
+  image_url?: string | null;
   detail: {
     wallets?: string[];
     wallet_labels?: Record<string, string>;
@@ -86,6 +87,7 @@ export interface RunningCoin {
   mint: string;
   symbol: string | null;
   name: string | null;
+  image_url?: string | null;
   theme: string | null;
   score: number;
   band: string;

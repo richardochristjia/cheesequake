@@ -40,7 +40,7 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
       if (wallet) { clauses.push("(a.wallet = ? OR a.kind = 'consensus')"); params.push(wallet); }
       const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
       const limit = wallet ? '' : 'LIMIT 200';
-      const rows = db.prepare(`SELECT a.ts, a.kind, a.mint, a.wallet, a.detail, t.symbol, t.name FROM alerts a LEFT JOIN tokens t ON t.mint = a.mint ${where} ORDER BY a.ts DESC, a.id DESC ${limit}`)
+      const rows = db.prepare(`SELECT a.ts, a.kind, a.mint, a.wallet, a.detail, t.symbol, t.name, t.image_url FROM alerts a LEFT JOIN tokens t ON t.mint = a.mint ${where} ORDER BY a.ts DESC, a.id DESC ${limit}`)
         .all(...params);
       const wl = wallets();
       const labelOf = new Map(wl.filter((w) => w?.label).map((w) => [w.address, w.label]));

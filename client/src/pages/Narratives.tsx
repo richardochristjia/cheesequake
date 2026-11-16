@@ -4,6 +4,7 @@ import {
   Badge,
   Card,
   TONE_TEXT,
+  TokenAvatar,
   WalletDisplay,
   WatchButton,
 } from '../components/ui';
@@ -143,6 +144,12 @@ export function Narratives({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                          <TokenAvatar
+                            imageUrl={r.image_url}
+                            symbol={r.symbol}
+                            mint={r.mint}
+                            size="sm"
+                          />
                           {r.symbol ? (
                             <>
                               <strong className="font-semibold text-[#f4ede2]">
@@ -237,6 +244,12 @@ export function Narratives({
                         <tr className="hover:bg-[#211c16]/40 transition-colors">
                           <td className="py-3 pr-4 align-middle whitespace-nowrap">
                             <div className="flex items-center gap-2 min-w-0">
+                              <TokenAvatar
+                                imageUrl={r.image_url}
+                                symbol={r.symbol}
+                                mint={r.mint}
+                                size="sm"
+                              />
                               {r.symbol ? (
                                 <>
                                   <strong className="font-semibold text-[#f4ede2]">

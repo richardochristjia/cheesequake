@@ -243,4 +243,8 @@ test('watchList returns latest vol_h24 and image_url with null defaults', () => 
   assert.equal(withCoin.image_url, 'https://cdn.example/with.png');
   assert.equal(withoutCoin.vol_h24, null);
   assert.equal(withoutCoin.image_url, null);
+
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,?,?,1,'[]','[]','[]',0.02,200000)").run(NOWS, mWith, 82, 'strong');
+  const [runCoin] = runningNow(db, NOW);
+  assert.equal(runCoin.image_url, 'https://cdn.example/with.png');
 });

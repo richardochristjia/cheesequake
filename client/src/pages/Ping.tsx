@@ -3,6 +3,7 @@ import {
   AddressLink,
   AlertWalletDisplay,
   Card,
+  TokenAvatar,
   WatchButton,
 } from '../components/ui';
 import { EmptyState } from '../components/EmptyState';
@@ -117,6 +118,12 @@ export function Ping({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                      <TokenAvatar
+                        imageUrl={a.image_url}
+                        symbol={a.symbol}
+                        mint={a.mint}
+                        size="sm"
+                      />
                       {a.symbol && (
                         <span className="font-semibold text-[#f4ede2]">
                           {a.symbol}
@@ -166,6 +173,12 @@ export function Ping({
                     </td>
                     <td className="py-2.5 pr-3 text-sm whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
+                        <TokenAvatar
+                          imageUrl={a.image_url}
+                          symbol={a.symbol}
+                          mint={a.mint}
+                          size="sm"
+                        />
                         {a.symbol && (
                           <span className="font-medium text-[#f4ede2]">
                             {a.symbol}
