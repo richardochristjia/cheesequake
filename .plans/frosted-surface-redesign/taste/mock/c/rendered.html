@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cheesequake: Solana Memecoin Scanner</title>
+  <link rel="stylesheet" href="mock-base.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Funnel+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #a8a8aa;
+      --surface: rgba(245, 245, 247, 0.58);
+      --surface-strong: rgba(255, 255, 255, 0.76);
+      --ink: #0e0e0e;
+      --muted: #2d3134;
+      --accent: #1f5c49;
+      --accent-ink: #ffffff;
+      --rim: rgba(255, 255, 255, 0.62);
+      --line: rgba(14, 14, 14, 0.12);
+      --font-display: "Funnel Sans", system-ui, sans-serif;
+      --font-mono: "DM Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.45), transparent 45%),
+        radial-gradient(circle at 85% 25%, rgba(31, 92, 73, 0.14), transparent 45%),
+        var(--bg);
+      color: var(--ink);
+      font: 15px/1.5 var(--font-display);
+      font-variant-numeric: tabular-nums;
+    }
+    .glass-header {
+      background: rgba(235, 236, 238, 0.68);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--rim);
+    }
+    .shell { max-width: 1120px; margin: 0 auto; padding: var(--s-4) var(--s-5); }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+    .sub { margin: var(--s-1) 0 0; font-size: 13px; color: var(--muted); }
+    .tabs { display: flex; gap: var(--s-2); margin-top: var(--s-3); flex-wrap: wrap; }
+    .tab {
+      min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 999px; border: 1px solid transparent;
+      background: transparent; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer;
+    }
+    .tab.active {
+      background: var(--surface-strong); border-color: var(--rim); color: var(--ink);
+    }
+    .main-wrap { max-width: 1120px; margin: 0 auto; padding: var(--s-5) var(--s-5) var(--s-7); display: grid; gap: var(--s-4); }
+    .glass-card {
+      background: var(--surface);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--rim);
+      border-radius: 22px;
+      padding: var(--s-5);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-4); }
+    .card-title { margin: 0; font-size: 17px; font-weight: 600; }
+    .card-desc { margin: var(--s-1) 0 0; font-size: 13.5px; color: var(--muted); max-width: 62ch; }
+    .btn-primary { min-height: 44px; padding: var(--s-2) var(--s-5); border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 500; cursor: pointer; }
+    .btn-ghost { min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 999px; border: 1px solid var(--line); background: var(--surface-strong); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; }
+    .watch-row { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) auto; gap: var(--s-3); align-items: center; padding-top: var(--s-3); border-top: 1px solid var(--line); }
+    @media (max-width: 720px) { .watch-row { grid-template-columns: 1fr 1fr; } }
+    .mono { font-family: var(--font-mono); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header class="glass-header">
+    <div class="shell">
+      <div class="top-bar">
+        <div>
+          <h1>Cheesequake Solana Scanner</h1>
+          <p class="sub">Local research dashboard. Scores are untested defaults; never trades.</p>
+        </div>
+        <button type="button" class="btn-ghost">Refresh data</button>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+        <button type="button" class="tab active" role="tab" aria-selected="true">Market</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Watch</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Ping</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Narratives</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Tracer</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-wrap">
+    <section class="glass-card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Market Trench Index — 64 / 100 (Hot)</h2>
+          <p class="card-desc">Percentile of five launch and trading measures against the last 30 days.</p>
+        </div>
+        <button type="button" class="btn-primary">Open Watchlist</button>
+      </div>
+      <svg viewBox="0 0 640 120" width="100%" height="120" role="img" aria-label="30-day Trench Index histogram">
+        <rect x="10" y="76" width="38" height="36" rx="6" fill="#1f5c49" fill-opacity="0.35"></rect>
+        <rect x="64" y="64" width="38" height="48" rx="6" fill="#1f5c49" fill-opacity="0.45"></rect>
+        <rect x="118" y="68" width="38" height="44" rx="6" fill="#1f5c49" fill-opacity="0.45"></rect>
+        <rect x="172" y="48" width="38" height="64" rx="6" fill="#1f5c49" fill-opacity="0.60"></rect>
+        <rect x="226" y="54" width="38" height="58" rx="6" fill="#1f5c49" fill-opacity="0.55"></rect>
+        <rect x="280" y="38" width="38" height="74" rx="6" fill="#1f5c49" fill-opacity="0.70"></rect>
+        <rect x="334" y="42" width="38" height="70" rx="6" fill="#1f5c49" fill-opacity="0.68"></rect>
+        <rect x="388" y="28" width="38" height="84" rx="6" fill="#1f5c49" fill-opacity="0.82"></rect>
+        <rect x="442" y="32" width="38" height="80" rx="6" fill="#1f5c49" fill-opacity="0.78"></rect>
+        <rect x="496" y="18" width="38" height="94" rx="6" fill="#1f5c49"></rect>
+      </svg>
+    </section>
+
+    <section class="glass-card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Watched Coins Snapshot</h2>
+          <p class="card-desc">Pinned tokens scanned first on every cycle for creator sells and liquidity drops.</p>
+        </div>
+      </div>
+      <div class="watch-row">
+        <div><strong>BRIE</strong> <span class="mono">So11…1112</span></div>
+        <div><span class="sub">Score</span><br><strong>84 / 100</strong></div>
+        <div><span class="sub">Market cap</span><br><strong>$412,000</strong></div>
+        <div><span class="sub">Liquidity</span><br><strong>$68,000</strong></div>
+        <button type="button" class="btn-ghost">Show chart</button>
+      </div>
+    </section>
+  </main>
+
+
+</body></html>

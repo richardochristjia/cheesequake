@@ -30,7 +30,7 @@ export function TrenchChart({
 
   if (indexValue === null || pts.length <= 1) {
     return (
-      <p className="text-sm text-[#9c8f80]">
+      <p className="text-sm text-[#cfc3b4]">
         Warming up: {hours} of {warmupHours} hours collected.
       </p>
     );
@@ -110,7 +110,7 @@ export function TrenchChart({
                 x={W - padR + 6}
                 y={(yTop + yBot) / 2 + 4}
                 fontSize="10"
-                fill="#9c8f80"
+                fill="#cfc3b4"
               >
                 {z.label}
               </text>
@@ -133,7 +133,7 @@ export function TrenchChart({
               y={y(g) + 4}
               fontSize="11"
               textAnchor="end"
-              fill="#9c8f80"
+              fill="#cfc3b4"
               className="tabular-nums"
             >
               {g}
@@ -181,7 +181,7 @@ export function TrenchChart({
           <span className="font-semibold text-[#e59a28]">
             {active.index_value} ({zoneName(active.index_value)})
           </span>
-          <span className="text-[#9c8f80]">
+          <span className="text-[#cfc3b4]">
             {new Date(active.hour * 1000).toLocaleString()}
           </span>
         </div>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cheesequake: Solana Memecoin Scanner</title>
+  <link rel="stylesheet" href="mock-base.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700&amp;family=DM+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #c3d7e5;
+      --surface: rgba(255, 255, 255, 0.58);
+      --surface-strong: rgba(255, 255, 255, 0.78);
+      --ink: #141414;
+      --muted: #334155;
+      --accent: #0f5257;
+      --accent-ink: #ffffff;
+      --rim: rgba(255, 255, 255, 0.72);
+      --line: rgba(20, 20, 20, 0.10);
+      --good: #0f5257;
+      --font-display: "Urbanist", system-ui, sans-serif;
+      --font-mono: "DM Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.65), transparent 42%),
+        radial-gradient(circle at 88% 18%, rgba(15, 82, 87, 0.14), transparent 45%),
+        var(--bg);
+      color: var(--ink);
+      font: 15px/1.5 var(--font-display);
+      font-variant-numeric: tabular-nums;
+    }
+    .glass-header {
+      background: rgba(208, 224, 235, 0.72);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--rim);
+    }
+    .shell { max-width: 1120px; margin: 0 auto; padding: var(--s-4) var(--s-5); }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+    .sub { margin: var(--s-1) 0 0; font-size: 13px; color: var(--muted); }
+    .tabs { display: flex; gap: var(--s-2); margin-top: var(--s-3); flex-wrap: wrap; }
+    .tab {
+      min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 10px; border: 1px solid transparent;
+      background: transparent; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer;
+    }
+    .tab.active {
+      background: var(--surface-strong); border-color: var(--rim); color: var(--ink);
+      box-shadow: 0 2px 10px rgba(15, 82, 87, 0.08);
+    }
+    .main-wrap { max-width: 1120px; margin: 0 auto; padding: var(--s-5) var(--s-5) var(--s-7); display: grid; gap: var(--s-4); }
+    .glass-card {
+      background: var(--surface);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--rim);
+      border-radius: 16px;
+      padding: var(--s-5);
+      box-shadow: 0 10px 30px rgba(20, 35, 52, 0.07);
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-4); }
+    .card-title { margin: 0; font-size: 17px; font-weight: 600; }
+    .card-desc { margin: var(--s-1) 0 0; font-size: 13.5px; color: var(--muted); max-width: 62ch; }
+    .kpi-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--s-5); align-items: center; }
+    @media (max-width: 720px) { .kpi-grid { grid-template-columns: 1fr; } }
+    .gauge-box { display: flex; flex-direction: column; align-items: center; padding: var(--s-3); background: var(--surface-strong); border-radius: 12px; border: 1px solid var(--rim); }
+    .gauge-num { font-size: 20px; font-weight: 600; font-family: var(--font-mono); margin-top: 0; }
+    .zone-pill { display: inline-block; margin-top: var(--s-2); padding: var(--s-1) var(--s-3); border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--accent-ink); }
+    .btn-primary { min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 10px; border: 0; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 500; cursor: pointer; }
+    .btn-ghost { min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 10px; border: 1px solid var(--line); background: var(--surface-strong); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; }
+    .watch-row { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) auto; gap: var(--s-3); align-items: center; padding-top: var(--s-3); border-top: 1px solid var(--line); }
+    @media (max-width: 720px) { .watch-row { grid-template-columns: 1fr 1fr; } }
+    .mono { font-family: var(--font-mono); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header class="glass-header">
+    <div class="shell">
+      <div class="top-bar">
+        <div>
+          <h1>Cheesequake Solana Scanner</h1>
+          <p class="sub">Local research dashboard. Scores are untested defaults; never trades.</p>
+        </div>
+        <button type="button" class="btn-ghost">Refresh data</button>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+        <button type="button" class="tab active" role="tab" aria-selected="true">Market</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Watch</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Ping</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Narratives</button>
+        <button type="button" class="tab" role="tab" aria-selected="false">Tracer</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-wrap">
+    <section class="glass-card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Market Trench Index</h2>
+          <p class="card-desc">Percentile of five launch and trading measures against the last 30 days.</p>
+        </div>
+        <button type="button" class="btn-primary">Open Watchlist</button>
+      </div>
+      <div class="kpi-grid">
+        <div class="gauge-box">
+          <svg viewBox="0 0 160 95" width="160" height="95" aria-hidden="true">
+            <path d="M 16 82 A 64 64 0 0 1 144 82" fill="none" stroke="rgba(20,20,20,0.12)" stroke-width="12" stroke-linecap="round"></path>
+            <path d="M 16 82 A 64 64 0 0 1 118 32" fill="none" stroke="#0f5257" stroke-width="12" stroke-linecap="round"></path>
+          </svg>
+          <span class="gauge-num">64 / 100</span>
+          <span class="zone-pill">Hot Zone</span>
+        </div>
+        <div>
+          <svg viewBox="0 0 540 130" width="100%" height="130" role="img" aria-label="30-day Trench Index area chart">
+            <defs>
+              <linearGradient id="areaA" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#0f5257" stop-opacity="0.28"></stop>
+                <stop offset="100%" stop-color="#0f5257" stop-opacity="0.02"></stop>
+              </linearGradient>
+            </defs>
+            <path d="M0,96 L60,84 L120,88 L180,64 L240,70 L300,48 L360,54 L420,38 L480,44 L540,28 L540,120 L0,120 Z" fill="url(#areaA)"></path>
+            <polyline points="0,96 60,84 120,88 180,64 240,70 300,48 360,54 420,38 480,44 540,28" fill="none" stroke="#0f5257" stroke-width="2.5" stroke-linejoin="round"></polyline>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Watched Coins Snapshot</h2>
+          <p class="card-desc">Pinned tokens scanned first on every cycle for creator sells and liquidity drops.</p>
+        </div>
+      </div>
+      <div class="watch-row">
+        <div><strong>BRIE</strong> <span class="mono">So11…1112</span></div>
+        <div><span class="sub">Score</span><br><strong>84 / 100</strong></div>
+        <div><span class="sub">Market cap</span><br><strong>$412,000</strong></div>
+        <div><span class="sub">Liquidity</span><br><strong>$68,000</strong></div>
+        <button type="button" class="btn-ghost">Show chart</button>
+      </div>
+    </section>
+  </main>
+
+
+</body></html>

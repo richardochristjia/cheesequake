@@ -53,7 +53,7 @@ export function Tracer({ refreshTick }: { refreshTick: number }) {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Start wallet address"
           aria-label="Start wallet address"
-          className="w-full max-w-md rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#9c8f80]/70"
+          className="w-full max-w-md rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
         />
         <button
           type="submit"
@@ -62,7 +62,7 @@ export function Tracer({ refreshTick }: { refreshTick: number }) {
           Trace
         </button>
       </form>
-      <p className="mt-2 mb-4 text-xs text-[#9c8f80]">{note}</p>
+      <p className="mt-2 mb-4 text-xs text-[#cfc3b4]">{note}</p>
 
       {error && (
         <p className="text-sm text-[#fb7185]">Could not load: {error}</p>

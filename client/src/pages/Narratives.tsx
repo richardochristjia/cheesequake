@@ -63,7 +63,7 @@ export function Narratives({
   if (!data) {
     return (
       <Card title="Running now">
-        <p className="text-sm text-[#9c8f80]">Loading…</p>
+        <p className="text-sm text-[#cfc3b4]">Loading…</p>
       </Card>
     );
   }
@@ -93,7 +93,7 @@ export function Narratives({
                   <strong className="block text-sm font-medium text-[#f4ede2]">
                     {p.name}
                   </strong>
-                  <p className="text-xs text-[#9c8f80] mt-0.5">{p.text}</p>
+                  <p className="text-xs text-[#cfc3b4] mt-0.5">{p.text}</p>
                   <div className="mt-1.5 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-[#110e0b]">
                     <div
                       className="h-full rounded-full bg-[#e59a28]"
@@ -101,14 +101,14 @@ export function Narratives({
                     />
                   </div>
                 </div>
-                <span className="text-xs text-[#9c8f80] whitespace-nowrap tabular-nums">
+                <span className="text-xs text-[#cfc3b4] whitespace-nowrap tabular-nums">
                   {p.points} of {p.max}
                 </span>
               </li>
             );
           })}
         </ul>
-        <p className="mt-3 text-xs text-[#9c8f80]">
+        <p className="mt-3 text-xs text-[#cfc3b4]">
           Missing data counts as 0 points and caps the score at 79.
         </p>
       </div>
@@ -122,14 +122,14 @@ export function Narratives({
         subtitle="Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction."
       >
         {data.running.length === 0 ? (
-          <p className="text-sm text-[#9c8f80]">
+          <p className="text-sm text-[#cfc3b4]">
             Nothing has passed every safety check in the last 30 minutes.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
                   <th className="py-2.5 pr-4 text-left">Coin</th>
                   <th className="py-2.5 px-3 text-left">Theme</th>
                   <th className="py-2.5 px-3 text-right">Score</th>
@@ -168,7 +168,7 @@ export function Narratives({
                         </td>
                         <td className="py-3 px-3 align-middle text-[#f4ede2]/90 whitespace-nowrap">
                           {r.theme || (
-                            <span className="text-[#9c8f80]">no theme</span>
+                            <span className="text-[#cfc3b4]">no theme</span>
                           )}
                         </td>
                         <td className="py-3 px-3 align-middle text-right text-base font-semibold text-[#f4ede2] tabular-nums whitespace-nowrap">
@@ -182,7 +182,7 @@ export function Narratives({
                         <td className="py-3 px-3 align-middle text-right text-[#f4ede2]/90 tabular-nums whitespace-nowrap">
                           {mcap}
                         </td>
-                        <td className="py-3 px-3 align-middle text-xs text-[#9c8f80] max-w-[240px]">
+                        <td className="py-3 px-3 align-middle text-xs text-[#cfc3b4] max-w-[240px]">
                           {missingList(r.unknowns)}
                         </td>
                         <td className="py-3 pl-3 align-middle text-right whitespace-nowrap">
@@ -228,13 +228,13 @@ export function Narratives({
         subtitle="A theme is a word that three or more trending coins share in their name or description. Share is how much of the last hour's trading went to coins with that word."
       >
         {themes.length === 0 ? (
-          <p className="text-sm text-[#9c8f80]">No themes yet.</p>
+          <p className="text-sm text-[#cfc3b4]">No themes yet.</p>
         ) : (
           <div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                  <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
                     <th className="py-2.5 pr-4 text-left">Word</th>
                     <th className="py-2.5 px-3 text-right w-24">Coins</th>
                     <th className="py-2.5 px-3 text-right">Traded, 1 h</th>
@@ -266,7 +266,7 @@ export function Narratives({
                                 style={{ width: `${sharePct}%` }}
                               />
                             </div>
-                            <span className="tabular-nums text-xs text-[#9c8f80] w-12 text-right">
+                            <span className="tabular-nums text-xs text-[#cfc3b4] w-12 text-right">
                               {fmt(t.share * 100, 1)}%
                             </span>
                           </div>
@@ -297,14 +297,14 @@ export function Narratives({
         subtitle="How tracked wallets have performed on their recorded trades."
       >
         {data.wallets.length === 0 ? (
-          <p className="text-sm text-[#9c8f80]">
+          <p className="text-sm text-[#cfc3b4]">
             No wallets tracked. Add some to wallets.txt.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
                   <th className="py-2.5 pr-4 text-left">Wallet</th>
                   <th className="py-2.5 px-3 text-left">Class</th>
                   <th className="py-2.5 px-3 text-right">Bought</th>
@@ -330,7 +330,7 @@ export function Narratives({
                     </td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-sm whitespace-nowrap">
                       {w.winRate === null ? (
-                        <span className="text-xs italic text-[#9c8f80]">
+                        <span className="text-xs italic text-[#cfc3b4]">
                           not enough trades yet
                         </span>
                       ) : (
@@ -342,7 +342,7 @@ export function Narratives({
                     <td className="py-2.5 px-3 text-right tabular-nums text-sm whitespace-nowrap">
                       {w.medianHoldSeconds === null ||
                       w.medianHoldSeconds === undefined ? (
-                        <span className="text-xs italic text-[#9c8f80]">
+                        <span className="text-xs italic text-[#cfc3b4]">
                           not enough trades yet
                         </span>
                       ) : (
@@ -353,7 +353,7 @@ export function Narratives({
                     </td>
                     <td className="py-2.5 pl-3 text-right tabular-nums text-sm whitespace-nowrap">
                       {w.stillHoldingShare === null ? (
-                        <span className="text-xs italic text-[#9c8f80]">
+                        <span className="text-xs italic text-[#cfc3b4]">
                           not enough trades yet
                         </span>
                       ) : (
@@ -375,12 +375,12 @@ export function Narratives({
         subtitle="Checks each coin's price 1, 6 and 24 hours after scoring."
       >
         {data.calibration.rows.length === 0 ? (
-          <p className="text-sm text-[#9c8f80]">{calEmpty}</p>
+          <p className="text-sm text-[#cfc3b4]">{calEmpty}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#9c8f80]">
+                <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
                   <th className="py-2.5 pr-4 text-left">Band</th>
                   <th className="py-2.5 px-3 text-right">Horizon</th>
                   <th className="py-2.5 px-3 text-right">Count</th>
@@ -397,7 +397,7 @@ export function Narratives({
                     <td className="py-2.5 pr-4 font-medium text-[#f4ede2] whitespace-nowrap">
                       {bandInfo(r.band).label}
                     </td>
-                    <td className="py-2.5 px-3 text-right tabular-nums text-xs text-[#9c8f80] whitespace-nowrap">
+                    <td className="py-2.5 px-3 text-right tabular-nums text-xs text-[#cfc3b4] whitespace-nowrap">
                       {r.horizon_h} h
                     </td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">

@@ -73,7 +73,7 @@ export function TracerGraph({
               markerHeight="6"
               orient="auto-start-reverse"
             >
-              <path d="M 0 1 L 8 5 L 0 9 z" fill="#9c8f80" fillOpacity="0.7" />
+              <path d="M 0 1 L 8 5 L 0 9 z" fill="#cfc3b4" fillOpacity="0.7" />
             </marker>
           </defs>
 
@@ -92,7 +92,7 @@ export function TracerGraph({
                 <path
                   d={d}
                   fill="none"
-                  stroke="#9c8f80"
+                  stroke="#cfc3b4"
                   strokeOpacity="0.45"
                   strokeWidth="1.5"
                   markerEnd="url(#tracer-arrow)"
@@ -153,7 +153,7 @@ export function TracerGraph({
                   x={p.x + 10}
                   y={p.y + 34}
                   fontSize="10"
-                  fill="#9c8f80"
+                  fill="#cfc3b4"
                 >
                   {n.type ? n.type : short(n.address)}
                 </text>
@@ -185,11 +185,11 @@ export function TracerGraph({
                 </Badge>
               )}
             </div>
-            <span className="text-[#9c8f80] tabular-nums">
+            <span className="text-[#cfc3b4] tabular-nums">
               Hop {selectedNode.depth}
             </span>
           </div>
-          <div className="flex flex-wrap gap-4 text-[#9c8f80] tabular-nums">
+          <div className="flex flex-wrap gap-4 text-[#cfc3b4] tabular-nums">
             <span>Incoming transfers: {incoming.length}</span>
             <span>Outgoing transfers: {outgoing.length}</span>
           </div>

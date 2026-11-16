@@ -13,7 +13,7 @@ export function EmptyState({
         viewBox="0 0 64 64"
         fill="none"
         aria-hidden="true"
-        className="mb-3 text-[#9c8f80]"
+        className="mb-3 text-[#cfc3b4]"
       >
         <circle
           cx="32"
@@ -41,7 +41,7 @@ export function EmptyState({
         <circle cx="35" cy="34" r="1.5" fill="#e59a28" fillOpacity="0.5" />
       </svg>
       <p className="text-sm font-medium text-[#f4ede2]">{title}</p>
-      <p className="mt-1 text-xs text-[#9c8f80] max-w-md">{description}</p>
+      <p className="mt-1 text-xs text-[#cfc3b4] max-w-md">{description}</p>
     </div>
   );
 }

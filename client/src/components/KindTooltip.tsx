@@ -12,7 +12,7 @@ export function KindTooltip({ kind }: { kind: string | null | undefined }) {
       <button
         type="button"
         aria-label={`What ${label} means`}
-        className="info-btn inline-flex items-center justify-center rounded p-0.5 text-[#9c8f80] hover:text-[#e59a28] focus-visible:text-[#e59a28] cursor-pointer"
+        className="info-btn inline-flex items-center justify-center rounded p-0.5 text-[#cfc3b4] hover:text-[#e59a28] focus-visible:text-[#e59a28] cursor-pointer"
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

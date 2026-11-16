@@ -90,7 +90,7 @@ export function Ping({
       )}
 
       {!error && !data && (
-        <p className="text-sm text-[#9c8f80]">Loading…</p>
+        <p className="text-sm text-[#cfc3b4]">Loading…</p>
       )}
 
       {!error && data && data.alerts.length === 0 && (
@@ -104,7 +104,7 @@ export function Ping({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#9c8f80]">
+              <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#cfc3b4]">
                 <th className="py-2 pr-3">Time</th>
                 <th className="py-2 pr-3">Kind</th>
                 <th className="py-2 pr-3">Coin</th>
@@ -116,7 +116,7 @@ export function Ping({
             <tbody className="divide-y divide-[#2d251d]/70">
               {data.alerts.map((a, idx) => (
                 <tr key={`${a.ts}-${a.kind}-${a.mint}-${idx}`}>
-                  <td className="py-2.5 pr-3 text-xs text-[#9c8f80] whitespace-nowrap tabular-nums">
+                  <td className="py-2.5 pr-3 text-xs text-[#cfc3b4] whitespace-nowrap tabular-nums">
                     {when(a.ts)}
                   </td>
                   <td className="py-2.5 pr-3 whitespace-nowrap">

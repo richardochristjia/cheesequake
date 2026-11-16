@@ -107,7 +107,7 @@ function WatchCard({
         </ul>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#9c8f80] tabular-nums">
+      <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#cfc3b4] tabular-nums">
         <span>Score: {scoreTxt}</span>
         <span>Price: {priceTxt}</span>
         <span>Market cap: {mcapTxt}</span>
@@ -129,7 +129,7 @@ function WatchCard({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#9c8f80]">
+              <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#cfc3b4]">
                 <th className="py-2 pr-3">Time</th>
                 <th className="py-2 pr-3">Kind</th>
                 <th className="py-2 pr-3">Wallet</th>
@@ -139,7 +139,7 @@ function WatchCard({
             <tbody className="divide-y divide-[#2d251d]/70">
               {alerts.map((a, idx) => (
                 <tr key={`${a.ts}-${a.kind}-${idx}`}>
-                  <td className="py-2 pr-3 text-xs text-[#9c8f80] whitespace-nowrap tabular-nums">
+                  <td className="py-2 pr-3 text-xs text-[#cfc3b4] whitespace-nowrap tabular-nums">
                     {when(a.ts)}
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap">
@@ -157,7 +157,7 @@ function WatchCard({
           </table>
         </div>
       ) : (
-        <p className="text-xs text-[#9c8f80]">No alerts for this coin yet.</p>
+        <p className="text-xs text-[#cfc3b4]">No alerts for this coin yet.</p>
       )}
     </Card>
   );
@@ -236,7 +236,7 @@ export function Watch({
             onChange={(e) => setMintInput(e.target.value)}
             placeholder="Coin mint address"
             aria-label="Coin mint address"
-            className="w-full max-w-md rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#9c8f80]/70"
+            className="w-full max-w-md rounded-lg border border-[#2d251d] bg-[#110e0b] px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
           />
           <button
             type="submit"
@@ -245,7 +245,7 @@ export function Watch({
             Watch coin
           </button>
         </form>
-        <p className="mt-2 text-xs text-[#9c8f80]">{note}</p>
+        <p className="mt-2 text-xs text-[#cfc3b4]">{note}</p>
       </Card>
 
       {error && (
@@ -256,7 +256,7 @@ export function Watch({
 
       {!error && coins === null && (
         <Card title="Watched coins">
-          <p className="text-sm text-[#9c8f80]">Loading…</p>
+          <p className="text-sm text-[#cfc3b4]">Loading…</p>
         </Card>
       )}
 

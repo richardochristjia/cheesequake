@@ -1,0 +1,98 @@
+{
+ "url": "http://127.0.0.1:5300/index.html",
+ "views": {
+  "desktop": {
+   "width": 1440,
+   "height": 900,
+   "navH": 0,
+   "scrollHeight": 900,
+   "screens": 1,
+   "sections": [
+    {
+     "n": 1,
+     "tag": "section",
+     "id": "",
+     "cls": "glass-card",
+     "top": 173,
+     "h": 168,
+     "hScreens": 0.19,
+     "offGrid": 168,
+     "tiles": [
+      {
+       "file": "desktop-sec-01-a.jpg",
+       "scrollY": 0,
+       "cutTop": 173,
+       "height": 168
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "tag": "section",
+     "id": "",
+     "cls": "glass-card",
+     "top": 364,
+     "h": 386,
+     "hScreens": 0.43,
+     "offGrid": 386,
+     "tiles": [
+      {
+       "file": "desktop-sec-02-a.jpg",
+       "scrollY": 0,
+       "cutTop": 364,
+       "height": 386
+      }
+     ]
+    }
+   ],
+   "consoleErrors": []
+  },
+  "mobile": {
+   "width": 390,
+   "height": 844,
+   "navH": 0,
+   "scrollHeight": 868,
+   "screens": 1.03,
+   "sections": [
+    {
+     "n": 1,
+     "tag": "section",
+     "id": "",
+     "cls": "glass-card",
+     "top": 296,
+     "h": 284,
+     "hScreens": 0.34,
+     "offGrid": 284,
+     "tiles": [
+      {
+       "file": "mobile-sec-01-a.jpg",
+       "scrollY": 24,
+       "cutTop": 272,
+       "height": 284
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "tag": "section",
+     "id": "",
+     "cls": "glass-card",
+     "top": 604,
+     "h": 216,
+     "hScreens": 0.26,
+     "offGrid": 216,
+     "tiles": [
+      {
+       "file": "mobile-sec-02-a.jpg",
+       "scrollY": 24,
+       "cutTop": 580,
+       "height": 216
+      }
+     ]
+    }
+   ],
+   "consoleErrors": []
+  }
+ },
+ "at": "2026-11-16T08:26:55.036Z"
+}

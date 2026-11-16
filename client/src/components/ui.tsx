@@ -3,11 +3,11 @@ import { B58, short, type Tone } from '../lib/format';
 import type { AlertItem } from '../types';
 
 const TONE_CLASSES: Record<Tone, string> = {
-  good: 'text-[#5cd093] border-[#5cd093]/40 bg-[#5cd093]/10',
-  mid: 'text-[#f59e0b] border-[#f59e0b]/40 bg-[#f59e0b]/10',
-  low: 'text-[#f59e0b] border-[#f59e0b]/40 bg-[#f59e0b]/10',
-  bad: 'text-[#fb7185] border-[#fb7185]/40 bg-[#fb7185]/10',
-  mut: 'text-[#9c8f80] border-[#2d251d] bg-[#211c16]',
+  good: 'text-[#5cd093] border-[#5cd093]/40 bg-[#14100d]/85',
+  mid: 'text-[#f59e0b] border-[#f59e0b]/40 bg-[#14100d]/85',
+  low: 'text-[#f59e0b] border-[#f59e0b]/40 bg-[#14100d]/85',
+  bad: 'text-[#fb7185] border-[#fb7185]/40 bg-[#14100d]/85',
+  mut: 'text-[#cfc3b4] border-[#f4ede2]/15 bg-[#14100d]/85',
 };
 
 export const TONE_TEXT: Record<Tone, string> = {
@@ -15,7 +15,7 @@ export const TONE_TEXT: Record<Tone, string> = {
   mid: 'text-[#f59e0b]',
   low: 'text-[#f59e0b]',
   bad: 'text-[#fb7185]',
-  mut: 'text-[#9c8f80]',
+  mut: 'text-[#cfc3b4]',
 };
 
 export function Card({
@@ -33,7 +33,7 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-xl border border-[#2d251d] bg-[#191511] p-4 sm:p-5 shadow-sm ${className}`}
+      className={`glass-card rounded-xl p-4 sm:p-5 ${className}`}
     >
       {(title || action) && (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -44,7 +44,7 @@ export function Card({
               </h2>
             )}
             {subtitle && (
-              <p className="mt-1 text-sm text-[#9c8f80] max-w-prose">
+              <p className="mt-1 text-sm text-[#ebe2d5] max-w-prose">
                 {subtitle}
               </p>
             )}
@@ -127,7 +127,7 @@ export function AlertWalletDisplay({ alert }: { alert: AlertItem }) {
       <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
         {wallets.map((w, i) => (
           <span key={w} className="inline-flex items-center gap-1">
-            {i > 0 && <span className="text-[#9c8f80]">, </span>}
+            {i > 0 && <span className="text-[#cfc3b4]">, </span>}
             <WalletDisplay
               address={w}
               label={Object.hasOwn(labels, w) ? labels[w] : null}

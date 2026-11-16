@@ -36,7 +36,7 @@ export function Market({ refreshTick }: { refreshTick: number }) {
   if (!data) {
     return (
       <Card title="Trench index">
-        <p className="text-sm text-[#9c8f80]">Loading…</p>
+        <p className="text-sm text-[#ebe2d5]">Loading…</p>
       </Card>
     );
   }
@@ -60,7 +60,7 @@ export function Market({ refreshTick }: { refreshTick: number }) {
         subtitle="Cold, Cool, Neutral, Hot, Euphoria. Percentile of five launch and trading measures against the last 30 days."
       >
         <div className="flex items-baseline gap-3">
-          <span className="text-5xl font-semibold tracking-tight text-[#f4ede2] tabular-nums">
+          <span className="text-[22px] font-semibold tracking-tight text-[#f4ede2] tabular-nums">
             {val === null ? '--' : val}
           </span>
           <Badge tone={zoneTone} className="text-sm px-2.5 py-1">

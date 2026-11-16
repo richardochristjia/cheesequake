@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cheesequake: Solana Memecoin Scanner</title>
+  <link rel="stylesheet" href="mock-base.css">
+  <style>
+    :root {
+      --bg: #110e0b;
+      --surface-elevated: rgba(68, 56, 44, 0.78);
+      --ink: #f4ede2;
+      --soft: #ebe2d5;
+      --mut: #cfc3b4;
+      --acc: #e59a28;
+      --acc-ink: #140f08;
+      --rim: rgba(244, 237, 226, 0.18);
+      --rim-top: rgba(244, 237, 226, 0.36);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+      background-color: var(--bg);
+      color: var(--ink);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Rich background graphics for frosted glass refraction */
+    .bg-scene {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(760px circle at 14% 20%, rgba(229, 154, 40, 0.34), transparent 58%),
+        radial-gradient(640px circle at 86% 42%, rgba(212, 128, 32, 0.28), transparent 56%),
+        radial-gradient(580px circle at 48% 82%, rgba(244, 237, 226, 0.14), transparent 58%),
+        linear-gradient(180deg, #16120e 0%, #0d0a08 100%);
+    }
+    .bg-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.9;
+    }
+    .page-layer {
+      position: relative;
+      z-index: 1;
+    }
+    .glass-header {
+      background: linear-gradient(180deg, rgba(44, 36, 28, 0.72) 0%, rgba(26, 21, 17, 0.68) 100%);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      border-bottom: 1px solid var(--rim);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+    }
+    .shell { max-width: 1152px; margin: 0 auto; padding: var(--s-4) var(--s-4); }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: var(--s-3); }
+    h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; color: var(--ink); }
+    .note { margin: var(--s-1) 0 0; font-size: 13px; color: var(--mut); }
+    .tabs { display: flex; gap: var(--s-1); margin-top: var(--s-3); flex-wrap: wrap; }
+    .tab {
+      display: inline-flex; align-items: center; gap: var(--s-2);
+      min-height: 44px; padding: var(--s-2) var(--s-4); border: 0; border-bottom: 2px solid transparent;
+      background: transparent; color: var(--mut); font: inherit; font-weight: 500; cursor: pointer; border-radius: 8px 8px 0 0;
+    }
+    .tab.active {
+      color: var(--ink); border-bottom-color: var(--acc);
+      background: linear-gradient(180deg, rgba(244, 237, 226, 0.12), rgba(244, 237, 226, 0.04));
+    }
+    .main-wrap { max-width: 1152px; margin: 0 auto; padding: var(--s-5) var(--s-4) var(--s-7); display: grid; gap: var(--s-5); }
+    .glass-card {
+      background: linear-gradient(
+        145deg,
+        rgba(255, 248, 238, 0.11) 0%,
+        rgba(56, 46, 36, 0.56) 42%,
+        rgba(30, 24, 19, 0.72) 100%
+      );
+      backdrop-filter: blur(22px) saturate(145%);
+      -webkit-backdrop-filter: blur(22px) saturate(145%);
+      border: 1px solid var(--rim);
+      border-top-color: var(--rim-top);
+      border-left-color: rgba(244, 237, 226, 0.24);
+      border-radius: 16px;
+      padding: var(--s-5);
+      box-shadow:
+        0 22px 48px -12px rgba(0, 0, 0, 0.72),
+        0 6px 16px rgba(0, 0, 0, 0.38),
+        inset 0 1px 0 rgba(255, 250, 242, 0.25),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.40);
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-3); }
+    h2 { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink); }
+    .subtitle { margin: var(--s-1) 0 0; font-size: 14px; color: var(--soft); max-width: 65ch; }
+    .kpi-row { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; }
+    .kpi-num { font-size: 22px; font-weight: 700; color: var(--ink); }
+    .zone-pill {
+      display: inline-block; padding: var(--s-1) var(--s-3); border-radius: 999px;
+      font-size: 12px; font-weight: 600; background: rgba(229, 154, 40, 0.20);
+      color: #f6be5e; border: 1px solid rgba(229, 154, 40, 0.45);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: var(--s-2);
+      min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 10px;
+      border: 1px solid var(--rim); border-top-color: var(--rim-top);
+      background: linear-gradient(180deg, rgba(78, 64, 50, 0.75), rgba(48, 39, 31, 0.85));
+      color: var(--ink); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+    .btn-acc {
+      display: inline-flex; align-items: center; gap: var(--s-2);
+      min-height: 44px; padding: var(--s-2) var(--s-4); border-radius: 10px;
+      border: 1px solid rgba(255, 232, 184, 0.45);
+      background: linear-gradient(180deg, #f0ab3c 0%, #d48817 100%);
+      color: var(--acc-ink);
+      font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
+      box-shadow: 0 6px 18px rgba(229, 154, 40, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-scene" aria-hidden="true">
+    <svg class="bg-svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <pattern id="grid" width="56" height="56" patternUnits="userSpaceOnUse">
+          <path d="M 56 0 L 0 0 0 56" fill="none" stroke="#f4ede2" stroke-opacity="0.08" stroke-width="1"></path>
+        </pattern>
+        <linearGradient id="beam1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e59a28" stop-opacity="0.38"></stop>
+          <stop offset="100%" stop-color="#e59a28" stop-opacity="0"></stop>
+        </linearGradient>
+        <linearGradient id="beam2" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f4ede2" stop-opacity="0.18"></stop>
+          <stop offset="100%" stop-color="#e59a28" stop-opacity="0.04"></stop>
+        </linearGradient>
+      </defs>
+      <rect width="1440" height="900" fill="url(#grid)"></rect>
+      <!-- Faceted warm light beams & geometric wedges behind cards -->
+      <polygon points="80,40 520,160 340,480 -40,340" fill="url(#beam1)"></polygon>
+      <polygon points="920,120 1460,240 1240,680 760,460" fill="url(#beam2)"></polygon>
+      <!-- Glowing amber orbs & orbital rings -->
+      <circle cx="240" cy="240" r="145" fill="#e59a28" fill-opacity="0.22"></circle>
+      <circle cx="240" cy="240" r="210" fill="none" stroke="#e59a28" stroke-opacity="0.36" stroke-width="2"></circle>
+      <circle cx="240" cy="240" r="295" fill="none" stroke="#f4ede2" stroke-opacity="0.14" stroke-width="1.5" stroke-dasharray="8 8"></circle>
+      <circle cx="1140" cy="460" r="170" fill="#d48817" fill-opacity="0.20"></circle>
+      <circle cx="1140" cy="460" r="240" fill="none" stroke="#e59a28" stroke-opacity="0.28" stroke-width="2"></circle>
+      <!-- Flowing seismic / cheesequake contour ribbons -->
+      <path d="M -80 560 Q 320 340 720 490 T 1520 320" fill="none" stroke="#e59a28" stroke-opacity="0.42" stroke-width="3.5"></path>
+      <path d="M -80 610 Q 340 390 740 540 T 1520 370" fill="none" stroke="#f4ede2" stroke-opacity="0.18" stroke-width="2"></path>
+      <path d="M -80 660 Q 360 440 760 590 T 1520 420" fill="none" stroke="#e59a28" stroke-opacity="0.24" stroke-width="2"></path>
+    </svg>
+  </div>
+
+  <div class="page-layer">
+    <header class="glass-header">
+      <div class="shell">
+        <div class="top-bar">
+          <div class="brand">
+            <svg width="32" height="32" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+              <rect width="36" height="36" rx="10" fill="#2e261e" stroke="rgba(244,237,226,0.24)"></rect>
+              <path d="M9 22 L18 11 L27 22 L27 25 L9 25 Z" fill="#e59a28" fill-opacity="0.26" stroke="#e59a28" stroke-width="1.75" stroke-linejoin="round"></path>
+            </svg>
+            <div>
+              <h1>Cheesequake Solana Scanner</h1>
+              <p class="note">Research tool. Not trading advice. Scores are untested defaults; it never trades.</p>
+            </div>
+          </div>
+          <button type="button" class="btn-ghost">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e59a28" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg>
+            Refresh
+          </button>
+        </div>
+        <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+          <button type="button" class="tab active" role="tab" aria-selected="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e59a28" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"></path></svg>
+            Market
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            Watch
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+            Ping
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path></svg>
+            Narratives
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg>
+            Tracer
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main-wrap">
+      <section class="glass-card">
+        <div class="card-head">
+          <div>
+            <h2>Trench index</h2>
+            <p class="subtitle">Cold, Cool, Neutral, Hot, Euphoria. Percentile of five launch and trading measures against the last 30 days.</p>
+          </div>
+          <button type="button" class="btn-acc">Open Watch</button>
+        </div>
+        <div class="kpi-row">
+          <span class="kpi-num">64 / 100</span>
+          <span class="zone-pill">Hot</span>
+          <span class="note">24 of 168 hours collected</span>
+        </div>
+      </section>
+
+      <section class="glass-card">
+        <div class="card-head">
+          <div>
+            <h2>Last 30 days</h2>
+            <p class="subtitle">Hover any point for hourly zone and index value.</p>
+          </div>
+        </div>
+        <svg viewBox="0 0 800 200" width="100%" height="200" role="img" aria-label="Trench index, last 30 days">
+          <defs>
+            <linearGradient id="areaPolish" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e59a28" stop-opacity="0.34"></stop>
+              <stop offset="100%" stop-color="#e59a28" stop-opacity="0.02"></stop>
+            </linearGradient>
+          </defs>
+          <line x1="40" x2="780" y1="44" y2="44" stroke="#f4ede2" stroke-opacity="0.14"></line>
+          <line x1="40" x2="780" y1="92" y2="92" stroke="#f4ede2" stroke-opacity="0.14"></line>
+          <line x1="40" x2="780" y1="140" y2="140" stroke="#f4ede2" stroke-opacity="0.14"></line>
+          <text x="6" y="48" font-size="11" fill="#cfc3b4">80</text>
+          <text x="6" y="96" font-size="11" fill="#cfc3b4">50</text>
+          <text x="6" y="144" font-size="11" fill="#cfc3b4">20</text>
+          <path d="M40,145 L145,130 L250,136 L355,104 L460,112 L565,78 L670,84 L780,58 L780,175 L40,175 Z" fill="url(#areaPolish)"></path>
+          <polyline points="40,145 145,130 250,136 355,104 460,112 565,78 670,84 780,58" fill="none" stroke="#e59a28" stroke-width="2.5" stroke-linejoin="round"></polyline>
+        </svg>
+      </section>
+    </main>
+  </div>
+
+
+</body></html>
