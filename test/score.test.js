@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
-import { scoreParts, capScore, runCandidates, runningNow } from '../src/score.js';
+import { scoreParts, capScore, runCandidates, runningNow, watchedMints, watchList } from '../src/score.js';
 
 const addr = (c) => c.repeat(4) + '1'.repeat(36);
 const NOW = 2_000_000_000_000;
@@ -93,4 +93,82 @@ test('a newer vetoed row hides an earlier listed row from Running now', () => {
   ins.run(NOWS - 120, MINT, 70, 'good', 1, '[]');
   ins.run(NOWS - 60, MINT, 0, 'avoid', 0, '["mint_authority"]');
   assert.deepEqual(runningNow(db, NOW), []);
+});
+
+test('runCandidates places watched mints first and evaluates full vetoes even when cheap veto fails', async () => {
+  const db = openDb(':memory:');
+  const watchedMint = addr('W');
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(watchedMint, NOWS - 10);
+  assert.deepEqual(watchedMints(db), [watchedMint]);
+
+  let rugCalled = false;
+  const dexGet = async (url) => {
+    if (url.includes('/tokens/v1/solana/')) return [{
+      chainId: 'solana', dexId: 'raydium', pairAddress: addr('P'), baseToken: { address: watchedMint, symbol: 'WTC', name: 'Watched' }, priceUsd: '0.005',
+      txns: { h1: { buys: 10, sells: 5 } }, volume: { h1: 1000, h6: 5000, h24: 10000 }, priceChange: { h1: 1 },
+      liquidity: { usd: 2000 }, fdv: 50000, marketCap: 50000, pairCreatedAt: (NOWS - 60) * 1000 }];
+    return [];
+  };
+  const rugGet = async () => {
+    rugCalled = true;
+    return {
+      mint: watchedMint, creator: addr('C'), creatorBalance: 0, mintAuthority: 'StillActive', freezeAuthority: null, rugged: true, risks: [], transferFee: {},
+      markets: [{ lp: { lpLockedPct: 100, quoteUSD: 1, baseUSD: 1 } }], topHolders: [{ address: 'a', owner: 'o', pct: 8 }], knownAccounts: {}, insiderNetworks: [],
+    };
+  };
+  const deps = { dexGet, geckoGet: async () => ({ data: [] }), rugGet, rpc: { mintInfo: async () => info } };
+  await runCandidates({ db, deps, now: () => NOW });
+
+  assert.equal(rugCalled, true);
+  const row = db.prepare('SELECT * FROM candidates WHERE mint = ?').get(watchedMint);
+  assert.equal(row.listed, 0);
+  const vetoes = JSON.parse(row.vetoes);
+  assert.ok(vetoes.includes('liquidity'), 'cheap liquidity veto recorded');
+  assert.ok(vetoes.includes('age'), 'cheap age veto recorded');
+  assert.ok(vetoes.includes('mint_authority'), 'full mint_authority veto recorded');
+  assert.ok(vetoes.includes('rugged'), 'full rugged veto recorded');
+});
+
+test('watchList classifies safe, caution, and flag coins with plain-English reasons and alerts', () => {
+  const db = openDb(':memory:');
+  const mSafe = addr('S'), mCaution = addr('C'), mFlag = addr('F'), mUnscanned = addr('U');
+  const insW = db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)');
+  insW.run(mSafe, 400);
+  insW.run(mCaution, 300);
+  insW.run(mFlag, 200);
+  insW.run(mUnscanned, 100);
+
+  db.prepare('INSERT INTO tokens(mint, symbol, name, creator) VALUES (?,?,?,?)').run(mSafe, 'SAFE', 'Safe Coin', addr('D'));
+  db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, symbol, name, price_usd, mcap_usd, liquidity_usd) VALUES (?, 'candidate', ?, ?, 'SAFE', 'Safe Coin', 0.12, 120000, 45000)").run(NOWS - 30, addr('P'), mSafe);
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,72,'confirm',1,'[]','[]','[]',0.12,120000)").run(NOWS - 30, mSafe);
+
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,55,'neutral',1,'[]','[]','[\"top10\"]',0.05,50000)").run(NOWS - 30, mCaution);
+  db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'exit_wallet',?,?,'{\"usd\":200}','ew1')").run(NOWS - 100, mCaution, addr('W'));
+
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,0,'avoid',0,'[\"mint_authority\"]','[]','[]',0.01,10000)").run(NOWS - 30, mFlag);
+  db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'exit_deployer',?,?,'{\"side\":\"sell\"}','ed1')").run(NOWS - 50, mFlag, addr('D'));
+
+  const list = watchList(db, NOW);
+  assert.deepEqual(list.map((x) => x.mint), [mSafe, mCaution, mFlag, mUnscanned]);
+
+  const [safeCoin, cautionCoin, flagCoin, unscannedCoin] = list;
+  assert.equal(safeCoin.status, 'safe');
+  assert.equal(safeCoin.label, 'Safe to hold');
+  assert.equal(safeCoin.pool, addr('P'));
+  assert.equal(safeCoin.liquidity_usd, 45000);
+  assert.match(safeCoin.reasons.join(' '), /Passed all safety checks/);
+
+  assert.equal(cautionCoin.status, 'caution');
+  assert.equal(cautionCoin.label, 'Caution');
+  assert.equal(cautionCoin.alerts.length, 1);
+  assert.match(cautionCoin.reasons.join(' '), /Tracked wallet sold/);
+  assert.match(cautionCoin.reasons.join(' '), /Missing safety or market data/);
+
+  assert.equal(flagCoin.status, 'flag');
+  assert.equal(flagCoin.label, 'Red flag');
+  assert.match(flagCoin.reasons.join(' '), /Mint authority is still active/);
+  assert.match(flagCoin.reasons.join(' '), /Creator wallet sold/);
+
+  assert.equal(unscannedCoin.status, 'caution');
+  assert.match(unscannedCoin.reasons.join(' '), /Waiting for first safety scan/);
 });

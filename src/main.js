@@ -5,7 +5,7 @@ import { createClient } from './http.js';
 import { loadWallets } from './wallets.js';
 import { createRpc } from './sources/solana.js';
 import { sampleNewPools, snapTrending, rollHourly, last } from './market.js';
-import { runWalletCycle, deployerWallets } from './ping.js';
+import { runWalletCycle, deployerWallets, checkExits } from './ping.js';
 import { runCandidates } from './score.js';
 import { fillOutcomes } from './outcomes.js';
 import { startTrace, getTrace, loadLabels } from './tracer.js';
@@ -41,7 +41,12 @@ function every(name, ms, fn) {
   timers.push(setInterval(tick, ms));
 }
 
-const server = await startServer({ db, config, tracer, wallets: walletList, now });
+const onWatch = () => {
+  runCandidates({ db, deps: { dexGet, geckoGet, rugGet, rpc }, tracked: walletList().map((w) => w.address), now, config })
+    .then(() => checkExits({ db, tracked: walletList().map((w) => w.address), now: now(), config }))
+    .catch((e) => console.error('watch:', e.message));
+};
+const server = await startServer({ db, config, tracer, wallets: walletList, onWatch, now });
 console.log(`Cheesequake dashboard: http://127.0.0.1:${server.address().port}`);
 
 every('new pools', config.intervals.newPools, async () => { await sampleNewPools({ db, get: geckoGet, now }); rollHourly({ db, now }); });

@@ -76,13 +76,19 @@ function saveCandidate(db, ts, mint, m, { score, band, listed, vetoes, reasons =
   return Number(id);
 }
 
+export function watchedMints(db) {
+  return db.prepare('SELECT mint FROM watched_coins ORDER BY added_ts DESC').all().map((r) => r.mint);
+}
+
 // deps: {dexGet, geckoGet, rugGet, rpc}; tracked: wallet addresses from the user's file.
 export async function runCandidates({ db, deps, tracked = [], now, config = defaultConfig }) {
   const nowMs = now();
   const nowS = Math.floor(nowMs / 1000);
   runThemes({ db, now: nowMs, config });
 
-  // 1. Universe, tracked-wallet mints first, capped at 60.
+  // 1. Universe, watched mints and tracked-wallet mints first, capped at 60.
+  const watched = watchedMints(db);
+  const watchedSet = new Set(watched);
   const tr = tracked.length ? db.prepare(
     `SELECT DISTINCT mint FROM trades WHERE side = 'buy' AND ts > ? AND wallet IN (${tracked.map(() => '?').join(',')})`).all(nowS - 86400, ...tracked).map((r) => r.mint) : [];
   const tsT = db.prepare("SELECT MAX(ts) t FROM pool_snapshots WHERE source = 'trending'").get().t;
@@ -90,7 +96,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   const listings = [...(await safe(() => boosts(deps.dexGet), [])), ...(await safe(() => profiles(deps.dexGet), []))];
   const extra = listings.map((x) => x.mint);
   const descOf = new Map(listings.filter((x) => x.description).map((x) => [x.mint, x.description]));
-  const universe = [...new Set([...tr, ...trending, ...extra])].filter(Boolean).slice(0, 60);
+  const universe = [...new Set([...watched, ...tr, ...trending, ...extra])].filter(Boolean).slice(0, 60);
   if (!universe.length) return [];
 
   // 2. Market data. If this source is down the whole cycle is skipped (nothing to score).
@@ -117,9 +123,9 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 
   const out = [];
   for (const [mint, m] of markets) {
-    // 4. Cheap vetoes first.
+    // 4. Cheap vetoes first (watched mints continue to full veto evaluation).
     const cheap = evaluate({ market: m, now: nowMs, names: CHEAP, config });
-    if (cheap.vetoes.length) { saveCandidate(db, nowS, mint, m, { score: 0, band: 'avoid', listed: 0, vetoes: cheap.vetoes, unknowns: cheap.unknowns }); continue; }
+    if (cheap.vetoes.length && !watchedSet.has(mint)) { saveCandidate(db, nowS, mint, m, { score: 0, band: 'avoid', listed: 0, vetoes: cheap.vetoes, unknowns: cheap.unknowns }); continue; }
 
     // 5. Report (reused when under 10 minutes old) and mint info.
     const stored = db.prepare('SELECT ts, json FROM reports WHERE mint = ?').get(mint);
@@ -132,7 +138,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 
     // 6. Remaining vetoes.
     const rest = evaluate({ market: m, report, mintInfo, now: nowMs, names: undefined, config });
-    const vetoes = rest.vetoes;
+    const vetoes = [...new Set([...cheap.vetoes, ...rest.vetoes])];
     const unknowns = [...new Set([...cheap.unknowns, ...rest.unknowns])];
     if (vetoes.length) { saveCandidate(db, nowS, mint, m, { score: 0, band: 'avoid', listed: 0, vetoes, unknowns }); continue; }
 
@@ -157,4 +163,83 @@ export function runningNow(db, now) {
      LEFT JOIN tokens t ON t.mint = c.mint LEFT JOIN token_theme tt ON tt.mint = c.mint
      WHERE c.listed = 1
      ORDER BY c.score DESC`).all(since).map((r) => ({ ...r, reasons: JSON.parse(r.reasons), unknowns: JSON.parse(r.unknowns), vetoes: JSON.parse(r.vetoes) }));
+}
+
+const VETO_REASONS = {
+  mint_authority: 'Mint authority is still active (new tokens can be minted)',
+  freeze_authority: 'Freeze authority is still active (wallets can be frozen)',
+  rugged: 'Flagged as rugged or high danger by RugCheck',
+  transfer_fee: 'Token charges a transfer fee',
+  lp_unlocked: 'Liquidity pool is not sufficiently locked',
+  top10: 'Top 10 holders own too much of the supply',
+  insiders: 'Insider wallets hold too much of the supply',
+  liquidity: 'Pool liquidity is below the safety minimum',
+  age: 'Coin is newer than the minimum age threshold',
+  wash: 'Suspected wash trading (high volume with too few buyers)',
+};
+
+const EXIT_REASONS = {
+  exit_deployer: 'Creator wallet sold or moved tokens in the last 24 hours',
+  exit_liquidity: 'Sharp liquidity drop detected in the last 24 hours',
+  exit_wallet: 'Tracked wallet sold this coin in the last 24 hours',
+  exit_divergence: 'Volume rose while unique buyers fell in the last 24 hours',
+};
+
+export function watchList(db, now, config = defaultConfig) {
+  const nowS = Math.floor(now / 1000);
+  const rows = db.prepare('SELECT mint, added_ts FROM watched_coins ORDER BY added_ts DESC').all();
+  const getTok = db.prepare('SELECT symbol, name, creator FROM tokens WHERE mint = ?');
+  const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
+  const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
+  const getAlerts = db.prepare('SELECT ts, kind, mint, wallet, detail FROM alerts WHERE mint = ? ORDER BY ts DESC, id DESC LIMIT 50');
+
+  return rows.map(({ mint, added_ts }) => {
+    const tok = getTok.get(mint);
+    const snap = getSnap.get(mint);
+    const cand = getCand.get(mint);
+    const alerts = getAlerts.all(mint).map((a) => ({ ...a, detail: JSON.parse(a.detail || '{}') }));
+    const vetoes = cand ? JSON.parse(cand.vetoes || '[]') : [];
+    const unknowns = cand ? JSON.parse(cand.unknowns || '[]') : [];
+    const scoreReasons = cand ? JSON.parse(cand.reasons || '[]') : [];
+    const recent = alerts.filter((a) => a.ts > nowS - 86400);
+    const hasAlert = (k) => recent.some((a) => a.kind === k);
+
+    const flagVetoes = vetoes.filter((v) => v !== 'age');
+    const isFlag = flagVetoes.length > 0 || hasAlert('exit_deployer') || hasAlert('exit_liquidity');
+    const isCaution = !isFlag && (!cand || hasAlert('exit_wallet') || hasAlert('exit_divergence') || vetoes.includes('age') || cand.score < 45 || unknowns.length > 0);
+    const status = isFlag ? 'flag' : isCaution ? 'caution' : 'safe';
+    const label = status === 'flag' ? 'Red flag' : status === 'caution' ? 'Caution' : 'Safe to hold';
+
+    const reasons = [];
+    if (!cand) reasons.push('Waiting for first safety scan');
+    for (const v of vetoes) reasons.push(VETO_REASONS[v] || `Safety check failed: ${v}`);
+    for (const k of ['exit_deployer', 'exit_liquidity', 'exit_wallet', 'exit_divergence']) {
+      if (hasAlert(k)) reasons.push(EXIT_REASONS[k]);
+    }
+    if (cand && !vetoes.length && cand.score < 45) reasons.push(`Score is low (${cand.score}/100)`);
+    if (cand && unknowns.length > 0) reasons.push(`Missing safety or market data: ${unknowns.join(', ')}`);
+    if (!reasons.length) reasons.push('Passed all safety checks with no recent exit alerts');
+
+    return {
+      mint,
+      added_ts,
+      symbol: tok?.symbol ?? snap?.symbol ?? null,
+      name: tok?.name ?? snap?.name ?? null,
+      creator: tok?.creator ?? null,
+      pool: snap?.pool ?? null,
+      price_usd: snap?.price_usd ?? cand?.price_usd ?? null,
+      mcap_usd: snap?.mcap_usd ?? cand?.mcap_usd ?? null,
+      liquidity_usd: snap?.liquidity_usd ?? null,
+      score: cand ? cand.score : null,
+      band: cand ? cand.band : null,
+      ts: cand ? cand.ts : null,
+      vetoes,
+      unknowns,
+      scoreReasons,
+      status,
+      label,
+      reasons,
+      alerts,
+    };
+  });
 }

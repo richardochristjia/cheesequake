@@ -90,7 +90,7 @@ test('a foreign Host header gets 403, a loopback one gets 200', async () => {
   } finally { server.close(); server.closeAllConnections(); }
 });
 
-function loadDashboard(narrativesPayload) {
+function loadDashboard(narrativesPayload, watchCoins = []) {
   const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   class Node { constructor(t = '') { this._text = String(t); } get textContent() { return this._text; } set textContent(v) { this._text = String(v); } }
@@ -110,6 +110,7 @@ function loadDashboard(narrativesPayload) {
     setAttribute(k, v) {
       this.attrs[k] = String(v);
       if (k === 'hidden') this.hidden = true;
+      if (k === 'value') this.value = String(v);
       if (k.startsWith('data-')) this.dataset[k.slice(5)] = String(v);
     }
     getAttribute(k) { return this.attrs[k]; }
@@ -124,7 +125,7 @@ function loadDashboard(narrativesPayload) {
       return out;
     }
   }
-  const els = new Map(['tabs', 'market', 'ping', 'narratives', 'tracer'].map((id) => [id, new El('section')]));
+  const els = new Map(['tabs', 'market', 'watch', 'ping', 'narratives', 'tracer'].map((id) => [id, new El('section')]));
   const document = {
     createElement: (t) => new El(t),
     createElementNS: (_ns, t) => new El(t),
@@ -132,13 +133,28 @@ function loadDashboard(narrativesPayload) {
     getElementById: (id) => els.get(id),
     querySelectorAll: () => els.get('tabs').children,
   };
-  const fetch = async (url) => ({
-    json: async () => (url === '/api/narratives' ? narrativesPayload
-      : { index: { value: null, zone: 'Neutral' }, hours: 0, warmupHours: 168, hourly: [] }),
-  });
+  let coins = [...watchCoins];
+  const calls = [];
+  const fetch = async (url, opts = {}) => {
+    calls.push({ url, method: opts.method || 'GET' });
+    if (url.startsWith('/api/watch')) {
+      const u = new URL(url, 'http://127.0.0.1');
+      const m = u.searchParams.get('mint');
+      if (opts.method === 'POST' && m && !coins.some((c) => c.mint === m)) {
+        coins.unshift({ mint: m, symbol: 'NEW', name: 'New Coin', pool: null, status: 'caution', label: 'Caution', score: null, price_usd: null, mcap_usd: null, liquidity_usd: null, reasons: ['Waiting for first safety scan'], alerts: [] });
+      } else if (opts.method === 'DELETE' && m) {
+        coins = coins.filter((c) => c.mint !== m);
+      }
+      return { json: async () => ({ ok: true, coins }) };
+    }
+    return {
+      json: async () => (url === '/api/narratives' ? narrativesPayload
+        : { index: { value: null, zone: 'Neutral' }, hours: 0, warmupHours: 168, hourly: [] }),
+    };
+  };
   const sandbox = { Node, document, fetch, setInterval: () => {}, encodeURIComponent, Object, Set, Map, Array, Number, String, Math, Date, RegExp, URL };
-  const exports = vm.runInNewContext(`${script}\n;({ PARTS, BANDS, UNKNOWNS, explainPart, bandInfo, missingList, narratives, openMints, show })`, sandbox);
-  return { ...exports, els };
+  const exports = vm.runInNewContext(`${script}\n;({ PARTS, BANDS, UNKNOWNS, explainPart, bandInfo, missingList, narratives, watch, openMints, openCharts, watchedSet, show })`, sandbox);
+  return { ...exports, els, calls };
 }
 
 test('narratives glossary covers every config weight, band, and unknown key', () => {
@@ -223,9 +239,106 @@ test('narratives orders cards, caps themes, handles fallbacks, and preserves ope
 
   await narratives();
   const refreshedRunning = root.children[0];
-  assert.equal(refreshedRunning.findAll((e) => e.tagName === 'BUTTON')[0].text, 'Hide');
+  const explainBtns = refreshedRunning.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Explain score' || e.text === 'Hide'));
+  assert.equal(explainBtns[0].text, 'Hide');
   assert.equal(refreshedRunning.findAll((e) => e.className === 'why')[0].hidden, false);
-  assert.equal(refreshedRunning.findAll((e) => e.tagName === 'BUTTON')[1].text, 'Explain score');
+  assert.equal(explainBtns[1].text, 'Explain score');
   assert.equal(refreshedRunning.findAll((e) => e.className === 'why')[1].hidden, true);
   assert.equal(root.children[1].findAll((e) => e.className === 'trow').length, 7);
+});
+
+test('/api/watch CRUD, validation, onWatch callback, and method guards', async () => {
+  const db = openDb(':memory:');
+  const watched = [];
+  const mint = addr('M');
+  const pool = addr('P');
+  db.prepare('INSERT INTO tokens(mint, symbol, name, creator) VALUES (?,?,?,?)').run(mint, 'WIF', 'dogwifhat', addr('D'));
+  db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, symbol, name, price_usd, mcap_usd, liquidity_usd) VALUES (?, 'candidate', ?, ?, 'WIF', 'dogwifhat', 1.25, 1250000, 90000)").run(NOW / 1000 - 30, pool, mint);
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,80,'strong',1,'[]','[]','[]',1.25,1250000)").run(NOW / 1000 - 30, mint);
+
+  const server = await startServer({
+    db, config, tracer: { start: () => ({}), get: () => ({}) },
+    onWatch: (m) => watched.push(m), now: () => NOW,
+  }, 0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    assert.deepEqual(await (await fetch(base + '/api/watch')).json(), { coins: [] });
+    assert.equal((await fetch(base + '/api/watch?mint=bad', { method: 'POST' })).status, 400);
+    assert.equal((await fetch(base + '/api/watch?mint=bad', { method: 'DELETE' })).status, 400);
+    assert.equal((await fetch(base + '/api/watch', { method: 'PUT' })).status, 405);
+    assert.equal((await fetch(base + '/api/market', { method: 'POST' })).status, 405);
+
+    const added = await (await fetch(base + '/api/watch?mint=' + mint, { method: 'POST' })).json();
+    assert.equal(added.ok, true);
+    assert.equal(added.coins.length, 1);
+    assert.equal(added.coins[0].mint, mint);
+    assert.equal(added.coins[0].status, 'safe');
+    assert.equal(added.coins[0].label, 'Safe to hold');
+    assert.equal(added.coins[0].pool, pool);
+    assert.deepEqual(watched, [mint]);
+
+    const removed = await (await fetch(base + '/api/watch?mint=' + mint, { method: 'DELETE' })).json();
+    assert.equal(removed.ok, true);
+    assert.deepEqual(removed.coins, []);
+  } finally { server.close(); server.closeAllConnections(); }
+});
+
+test('Watch tab renders hold badges, plain-English reasons, ping table, and toggles lazy chart iframe across refreshes', async () => {
+  const mintSafe = addr('S'), mintFlag = addr('F'), poolSafe = addr('P');
+  const seeded = [
+    {
+      mint: mintSafe, symbol: 'GOOD', name: 'Good Coin', pool: poolSafe,
+      status: 'safe', label: 'Safe to hold', score: 78, price_usd: 0.025, mcap_usd: 250000, liquidity_usd: 55000,
+      reasons: ['Passed all safety checks with no recent exit alerts'],
+      alerts: [{ ts: 1700000000, kind: 'consensus', mint: mintSafe, wallet: null, detail: { wallets: ['a', 'b', 'c'], mcap: 200000 } }],
+    },
+    {
+      mint: mintFlag, symbol: 'RUG', name: 'Rug Coin', pool: null,
+      status: 'flag', label: 'Red flag', score: 0, price_usd: 0.0001, mcap_usd: 1000, liquidity_usd: 500,
+      reasons: ['Mint authority is still active (new tokens can be minted)', 'Creator wallet sold or moved tokens in the last 24 hours'],
+      alerts: [{ ts: 1700000100, kind: 'exit_deployer', mint: mintFlag, wallet: addr('D'), detail: { side: 'sell' } }],
+    },
+  ];
+  const { watch, show, els, calls } = loadDashboard({ running: [], themes: [], wallets: [], calibration: { rows: [], missed: 0 } }, seeded);
+  show('watch');
+  await watch();
+
+  const root = els.get('watch');
+  assert.match(root.text, /Safe to hold/);
+  assert.match(root.text, /Red flag/);
+  assert.match(root.text, /Mint authority is still active/);
+  assert.match(root.text, /creator sell/);
+  assert.equal(root.findAll((e) => e.tagName === 'IFRAME').length, 0);
+
+  const chartBtns = root.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Show chart' || e.text === 'Hide chart'));
+  assert.equal(chartBtns.length, 2);
+  chartBtns[0].onclick();
+  assert.equal(chartBtns[0].text, 'Hide chart');
+  const iframes = root.findAll((e) => e.tagName === 'IFRAME');
+  assert.equal(iframes.length, 1);
+  assert.match(iframes[0].getAttribute('src'), new RegExp(`https://dexscreener\\.com/solana/${poolSafe}\\?embed=1`));
+
+  // Refresh preserves open chart state
+  await watch();
+  const iframesAfterRefresh = root.findAll((e) => e.tagName === 'IFRAME');
+  assert.equal(iframesAfterRefresh.length, 1);
+  const refreshedChartBtn = root.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Show chart' || e.text === 'Hide chart'))[0];
+  assert.equal(refreshedChartBtn.text, 'Hide chart');
+
+  // Hide chart removes the iframe
+  refreshedChartBtn.onclick();
+  assert.equal(root.findAll((e) => e.tagName === 'IFRAME').length, 0);
+
+  // Add a watched coin via the input form
+  const input = root.findAll((e) => e.tagName === 'INPUT')[0];
+  const watchBtnEl = root.findAll((e) => e.tagName === 'BUTTON' && e.text === 'Watch coin')[0];
+  input.value = 'invalid';
+  await watchBtnEl.onclick();
+  assert.match(root.text, /not a valid Solana mint address/);
+
+  const mintNew = addr('N');
+  input.value = mintNew;
+  await watchBtnEl.onclick();
+  assert.ok(calls.some((c) => c.method === 'POST' && c.url.includes(mintNew)));
+  assert.match(root.text, /Waiting for first safety scan/);
 });

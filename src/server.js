@@ -2,19 +2,20 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { B58 } from './wallets.js';
 import { recentHourly, trenchIndex } from './market.js';
-import { runningNow } from './score.js';
+import { runningNow, watchList } from './score.js';
 import { scorecardFor } from './scorecard.js';
 import { calibration } from './outcomes.js';
 
 const PAGE = new URL('../public/index.html', import.meta.url);
 
-// deps: {db, config, tracer: {start(wallet), get(wallet)}, wallets: () => [{address,label}], now}
-export function createServer({ db, config, tracer, wallets = () => [], now = Date.now }) {
+// deps: {db, config, tracer: {start(wallet), get(wallet)}, wallets: () => [{address,label}], onWatch, now}
+export function createServer({ db, config, tracer, wallets = () => [], onWatch = () => {}, now = Date.now }) {
   const api = {
     '/api/market': () => {
       const hourly = recentHourly(db, config.index.windowHours);
       return { index: trenchIndex(hourly), hours: hourly.length, warmupHours: config.index.warmupHours, hourly };
     },
+    '/api/watch': () => ({ coins: watchList(db, now(), config) }),
     '/api/ping': (q) => {
       const kind = q.get('kind');
       const where = !kind ? '' : kind === 'exit' ? "WHERE kind LIKE 'exit\\_%' ESCAPE '\\'" : 'WHERE kind = ?';
@@ -46,9 +47,20 @@ export function createServer({ db, config, tracer, wallets = () => [], now = Dat
     };
     // Blocks DNS rebinding: a hostile page that rebinds its name to 127.0.0.1 still sends its own Host.
     if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host ?? '')) return send(403, { error: 'forbidden host' });
-    if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
     try {
       const url = new URL(req.url, 'http://127.0.0.1');
+      if (url.pathname === '/api/watch' && (req.method === 'POST' || req.method === 'DELETE')) {
+        const mint = url.searchParams.get('mint') ?? '';
+        if (!B58.test(mint)) return send(400, { error: 'invalid mint address' });
+        if (req.method === 'POST') {
+          db.prepare('INSERT OR IGNORE INTO watched_coins(mint, added_ts) VALUES (?,?)').run(mint, Math.floor(now() / 1000));
+          onWatch(mint);
+        } else {
+          db.prepare('DELETE FROM watched_coins WHERE mint = ?').run(mint);
+        }
+        return send(200, { ok: true, coins: watchList(db, now(), config) });
+      }
+      if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
       if (url.pathname === '/') return send(200, readFileSync(PAGE, 'utf8'), 'text/html');
       const h = Object.hasOwn(api, url.pathname) && api[url.pathname];
       if (!h) return send(404, { error: 'not found' });

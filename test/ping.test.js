@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
-import { runWalletCycle, checkExits } from '../src/ping.js';
+import { runWalletCycle, checkExits, deployerWallets } from '../src/ping.js';
 import { tx, fakeRpc, addr } from './helpers.js';
 
 
@@ -205,4 +205,28 @@ test('buys polled newest first still give exactly one consensus alert', async ()
 
 test('buys 100 minutes apart around a middle buy are not one consensus', async () => {
   assert.equal(count(await scenario([1000, 1000 + 3000, 1000 + 6000]), 'consensus'), 0);
+});
+
+test('deployerWallets and checkExits monitor watched coins even when unlisted or older than 24h', () => {
+  const db = openDb(':memory:');
+  const mint = addr('W'), dep = addr('D'), trk = addr('T');
+  const now = 1_000_000 * 1000;
+  const nowS = now / 1000;
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(mint, nowS - 200_000);
+  db.prepare('INSERT INTO tokens(mint, creator) VALUES (?,?)').run(mint, dep);
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,0)').run(nowS - 200_000, mint, 0, 'avoid');
+
+  assert.deepEqual(deployerWallets(db, now), [dep]);
+
+  const tr = db.prepare('INSERT INTO trades VALUES (?,?,?,?,?,?,?)');
+  tr.run('w1', trk, mint, 'sell', 1, 75, nowS - 300);
+  tr.run('w2', dep, mint, 'out', 1, 0, nowS - 200);
+  const snap = db.prepare('INSERT INTO pool_snapshots(ts, source, mint, liquidity_usd, vol_h1, buyers_h1) VALUES (?,?,?,?,?,?)');
+  snap.run(nowS - 3600, 'candidate', mint, 100000, 10000, 50);
+  snap.run(nowS - 100, 'candidate', mint, 50000, 20000, 20);
+
+  checkExits({ db, tracked: [trk], now });
+  for (const k of ['exit_wallet', 'exit_deployer', 'exit_liquidity', 'exit_divergence']) {
+    assert.equal(count(db, k), 1, k);
+  }
 });

@@ -49,7 +49,9 @@ Entries are added or amended **only with human approval**.
 - (wallets) Newly tracked wallets are backfilled from recent on-chain transactions on first sight without raising alerts.
 - (wallets) Each tracked wallet currently carries a scorecard computed from its own recorded trades.
 - (ping) A consensus alert is raised when at least three non-sniper tracked wallets buy the same token within sixty minutes.
-- (ping) Exit alerts are raised for listed tokens on tracked-wallet sells, deployer sells and sharp liquidity drops.
+- (ping) Exit alerts are raised for listed and watched tokens on tracked-wallet sells, deployer sells and sharp liquidity drops.
+- (watch) Watched tokens are managed from the dashboard and persisted to SQLite.
+- (watch) Each watched token carries a hold status derived from its latest safety vetoes, exit alerts and score.
 - (score) A token that trips any veto is excluded from candidates regardless of its score.
 - (score) A missing source answer is recorded as unknown and never counts as a pass.
 - (score) Social media data is currently not an input to the score.

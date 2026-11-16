@@ -95,19 +95,26 @@ export async function runWalletCycle({ db, rpc, tracked, deployers = [], solUsd,
   try { checkExits({ db, tracked, now: now(), config }); } catch (e) { console.error(`ping: exits ${e.message}`); }
 }
 
-// Deployers of the 20 best candidates listed in the last 24 h (watched for their own sells).
+// Deployers of the 20 best candidates listed in the last 24 h plus watched coins (watched for their own sells).
 export function deployerWallets(db, now) {
-  return db.prepare(
+  const top = db.prepare(
     `SELECT t.creator FROM candidates c JOIN tokens t ON t.mint = c.mint
      WHERE c.listed = 1 AND c.ts > ? AND t.creator IS NOT NULL
      GROUP BY c.mint ORDER BY MAX(c.score) DESC LIMIT 20`).all(Math.floor(now / 1000) - 86400).map((r) => r.creator);
+  const watched = db.prepare(
+    'SELECT t.creator FROM watched_coins w JOIN tokens t ON t.mint = w.mint WHERE t.creator IS NOT NULL').all().map((r) => r.creator);
+  return [...new Set([...top, ...watched])];
 }
 
-// Exit alerts for mints listed in the last 24 h. Deduped per kind, mint, wallet and hour.
+// Exit alerts for mints listed in the last 24 h or in watched_coins. Deduped per kind, mint, wallet and hour.
 export function checkExits({ db, tracked, now, config = defaultConfig }) {
   const nowS = Math.floor(now / 1000);
   const mints = db.prepare(
-    `SELECT DISTINCT c.mint, t.creator FROM candidates c LEFT JOIN tokens t ON t.mint = c.mint WHERE c.listed = 1 AND c.ts > ?`).all(nowS - 86400);
+    `SELECT m.mint, t.creator FROM (
+       SELECT DISTINCT mint FROM candidates WHERE listed = 1 AND ts > ?
+       UNION
+       SELECT mint FROM watched_coins
+     ) m LEFT JOIN tokens t ON t.mint = m.mint`).all(nowS - 86400);
   const trackedSet = new Set(tracked);
   const fire = (kind, mint, wallet, ts, detail) =>
     insertAlert(db, { ts, kind, mint, wallet, detail, dedupe: `${kind}:${mint}:${wallet ?? ''}:${Math.floor(ts / 3600)}` });

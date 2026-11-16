@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS theme_hourly(hour, keyword, tokens, volume, share, PR
 CREATE TABLE IF NOT EXISTS token_theme(mint PRIMARY KEY, keyword, hour);
 CREATE TABLE IF NOT EXISTS trace_cache(start PRIMARY KEY, ts, status, json);
 CREATE TABLE IF NOT EXISTS pending_sigs(sig PRIMARY KEY, wallet, cycles);
+CREATE TABLE IF NOT EXISTS watched_coins(mint PRIMARY KEY, added_ts);
 `;
 
 export function openDb(path) {
