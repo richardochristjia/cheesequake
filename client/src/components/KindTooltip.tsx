@@ -1,17 +1,24 @@
 import { Info } from 'lucide-react';
 import { KIND_INFO } from '../lib/glossary';
 
+function humanizeKind(raw: string): string {
+  if (!raw) return '';
+  const spaced = raw.replaceAll('_', ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 export function KindTooltip({ kind }: { kind: string | null | undefined }) {
-  const label = kind == null ? '' : String(kind);
-  const desc = Object.hasOwn(KIND_INFO, label) ? KIND_INFO[label] : null;
-  if (!desc) return <span>{label}</span>;
+  const raw = kind == null ? '' : String(kind);
+  const display = humanizeKind(raw);
+  const desc = Object.hasOwn(KIND_INFO, raw) ? KIND_INFO[raw] : null;
+  if (!desc) return <span>{display}</span>;
 
   return (
     <span className="info-tip group relative inline-flex items-center gap-1">
-      <span className="font-mono text-xs text-[#f4ede2]">{label}</span>
+      <span className="text-xs font-medium text-[#f4ede2]">{display}</span>
       <button
         type="button"
-        aria-label={`What ${label} means`}
+        aria-label={`What ${display} means`}
         className="info-btn inline-flex items-center justify-center rounded p-0.5 text-[#cfc3b4] hover:text-[#e59a28] focus-visible:text-[#e59a28] cursor-pointer"
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />

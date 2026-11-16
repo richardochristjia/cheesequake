@@ -36,21 +36,17 @@ export function TrenchChart({
     );
   }
 
-  const W = 800;
-  const H = 240;
-  const padL = 36;
-  const padR = 64;
-  const padT = 16;
-  const padB = 24;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
+  const W = 560;
+  const H = 220;
+  const plotW = W;
+  const plotH = H;
 
   const t0 = pts[0].hour;
   const t1 = pts[pts.length - 1].hour || t0 + 1;
   const span = Math.max(1, t1 - t0);
 
-  const x = (t: number) => padL + ((t - t0) / span) * plotW;
-  const y = (v: number) => padT + plotH - (v / 100) * plotH;
+  const x = (t: number) => ((t - t0) / span) * plotW;
+  const y = (v: number) => plotH - (v / 100) * plotH;
 
   const linePoints = pts.map((r) => `${x(r.hour)},${y(r.index_value)}`).join(' ');
   const areaPath = `M ${x(pts[0].hour)},${y(0)} L ${pts
@@ -79,99 +75,107 @@ export function TrenchChart({
 
   return (
     <div className="relative">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto select-none"
-        role="img"
-        aria-label="Trench index, last 30 days"
-        onMouseMove={handleMove}
-        onMouseLeave={() => setHoverIdx(null)}
-      >
-        <defs>
-          <linearGradient id="trench-area-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#e59a28" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#e59a28" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
+      <div className="flex items-stretch gap-2">
+        <div
+          aria-hidden="true"
+          className="relative w-7 shrink-0 text-right text-xs leading-none text-[#cfc3b4] tabular-nums select-none"
+        >
+          {[100, 80, 60, 40, 20, 0].map((g) => (
+            <span
+              key={g}
+              style={{ top: `${100 - g}%` }}
+              className="absolute right-0 -translate-y-1/2"
+            >
+              {g}
+            </span>
+          ))}
+        </div>
 
-        {ZONES.map((z) => {
-          const yTop = y(z.max);
-          const yBot = y(z.min);
-          return (
-            <g key={z.label}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="min-w-0 flex-1 h-auto block select-none overflow-visible"
+          role="img"
+          aria-label="Trench index, last 30 days"
+          onMouseMove={handleMove}
+          onMouseLeave={() => setHoverIdx(null)}
+        >
+          <defs>
+            <linearGradient id="trench-area-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e59a28" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#e59a28" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {ZONES.map((z) => {
+            const yTop = y(z.max);
+            const yBot = y(z.min);
+            return (
               <rect
-                x={padL}
+                key={z.label}
+                x={0}
                 y={yTop}
                 width={plotW}
                 height={yBot - yTop}
                 fill={z.fill}
               />
-              <text
-                x={W - padR + 6}
-                y={(yTop + yBot) / 2 + 4}
-                fontSize="10"
-                fill="#cfc3b4"
-              >
-                {z.label}
-              </text>
-            </g>
-          );
-        })}
+            );
+          })}
 
-        {[0, 20, 40, 60, 80, 100].map((g) => (
-          <g key={g}>
+          {[0, 20, 40, 60, 80, 100].map((g) => (
             <line
-              x1={padL}
-              x2={W - padR}
+              key={g}
+              x1={0}
+              x2={plotW}
               y1={y(g)}
               y2={y(g)}
               stroke="#2d251d"
               strokeWidth="1"
             />
-            <text
-              x={padL - 6}
-              y={y(g) + 4}
-              fontSize="11"
-              textAnchor="end"
-              fill="#cfc3b4"
-              className="tabular-nums"
-            >
-              {g}
-            </text>
-          </g>
-        ))}
+          ))}
 
-        <path d={areaPath} fill="url(#trench-area-grad)" />
-        <polyline
-          points={linePoints}
-          fill="none"
-          stroke="#e59a28"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
+          <path d={areaPath} fill="url(#trench-area-grad)" />
+          <polyline
+            points={linePoints}
+            fill="none"
+            stroke="#e59a28"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
 
-        {active && (
-          <g>
-            <line
-              x1={activeX}
-              x2={activeX}
-              y1={padT}
-              y2={padT + plotH}
-              stroke="#f4ede2"
-              strokeOpacity="0.35"
-              strokeDasharray="3 3"
-            />
-            <circle
-              cx={activeX}
-              cy={activeY}
-              r="4.5"
-              fill="#e59a28"
-              stroke="#110e0b"
-              strokeWidth="2"
-            />
-          </g>
-        )}
-      </svg>
+          {active && (
+            <g>
+              <line
+                x1={activeX}
+                x2={activeX}
+                y1={0}
+                y2={plotH}
+                stroke="#f4ede2"
+                strokeOpacity="0.35"
+                strokeDasharray="3 3"
+              />
+              <circle
+                cx={activeX}
+                cy={activeY}
+                r="4.5"
+                fill="#e59a28"
+                stroke="#110e0b"
+                strokeWidth="2"
+              />
+            </g>
+          )}
+        </svg>
+
+        <div
+          aria-hidden="true"
+          className="flex w-14 shrink-0 flex-col text-xs leading-none text-[#cfc3b4] select-none"
+        >
+          {ZONES.map((z) => (
+            <span key={z.label} className="flex flex-1 items-center">
+              {z.label}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {active && (
         <div

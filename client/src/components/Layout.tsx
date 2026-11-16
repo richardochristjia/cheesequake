@@ -123,8 +123,8 @@ export function Layout({
       </div>
 
       <header className="sticky top-0 z-20 glass-header">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto max-w-6xl px-4 py-2.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <svg
               width="36"
               height="36"
@@ -162,7 +162,7 @@ export function Layout({
               <h1 className="text-2xl font-semibold tracking-tight text-[#f4ede2]">
                 Cheesequake
               </h1>
-              <p className="text-xs text-[#cfc3b4]">
+              <p className="hidden sm:block text-xs text-[#cfc3b4]">
                 Research tool. Not trading advice. Scores are untested defaults;
                 it never trades.
               </p>
@@ -194,7 +194,7 @@ export function Layout({
         <nav
           role="tablist"
           aria-label="Dashboard sections"
-          className="mx-auto max-w-6xl px-4 flex flex-wrap gap-1"
+          className="mx-auto max-w-6xl px-4 flex flex-nowrap overflow-x-auto gap-1"
         >
           {TABS.map(({ id, label, icon: Icon }) => {
             const selected = activeTab === id;
@@ -205,7 +205,7 @@ export function Layout({
                 role="tab"
                 aria-selected={selected}
                 onClick={() => onTabChange(id)}
-                className={`inline-flex min-h-[44px] items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
+                className={`inline-flex shrink-0 min-h-[44px] items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
                   selected
                     ? 'border-[#e59a28] text-[#f4ede2]'
                     : 'border-transparent text-[#cfc3b4] hover:text-[#f4ede2]'

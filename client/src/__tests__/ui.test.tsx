@@ -76,8 +76,10 @@ describe('Cheesequake UI', () => {
 
   it('KindTooltip renders accessible tooltip for known kinds, handles unknown kinds, and is XSS-safe', () => {
     for (const kind of EXPECTED_KINDS) {
+      const display = kind.replaceAll('_', ' ');
+      const expectedLabel = display.charAt(0).toUpperCase() + display.slice(1);
       const { unmount } = render(<KindTooltip kind={kind} />);
-      const btn = screen.getByRole('button', { name: new RegExp(kind) });
+      const btn = screen.getByRole('button', { name: `What ${expectedLabel} means` });
       expect(btn).toHaveAttribute('type', 'button');
       const tip = screen.getByRole('tooltip', { hidden: true });
       expect(tip.textContent).toBe(KIND_INFO[kind]);
@@ -85,11 +87,11 @@ describe('Cheesequake UI', () => {
     }
 
     const { rerender, container } = render(<KindTooltip kind="unknown_kind" />);
-    expect(container.textContent).toBe('unknown_kind');
+    expect(container.textContent).toBe('Unknown kind');
     expect(screen.queryByRole('button')).toBeNull();
 
     rerender(<KindTooltip kind="toString" />);
-    expect(container.textContent).toBe('toString');
+    expect(container.textContent).toBe('ToString');
     expect(screen.queryByRole('button')).toBeNull();
 
     rerender(<KindTooltip kind={null} />);
@@ -171,14 +173,14 @@ describe('Cheesequake UI', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'What exit_deployer means' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'What exit_divergence means' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'What Exit deployer means' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'What Exit divergence means' })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'What buy means' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'What consensus means' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'What Buy means' }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: 'What Consensus means' }).length).toBeGreaterThan(0);
     });
   });
 
@@ -219,9 +221,9 @@ describe('Cheesequake UI', () => {
       'Calibration: later price by score band',
     ]);
 
-    expect(screen.getByText('AAAA…1111')).toBeInTheDocument();
-    expect(screen.getByText('no theme')).toBeInTheDocument();
-    expect(screen.getByText('easy to sell')).toBeInTheDocument();
+    expect(screen.getAllByText('AAAA…1111').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('no theme').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('easy to sell').length).toBeGreaterThan(0);
 
     // Themes capped at 5
     expect(screen.getByText('word4')).toBeInTheDocument();
@@ -230,18 +232,19 @@ describe('Cheesequake UI', () => {
     expect(screen.getByText('word6')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show top 5' })).toBeInTheDocument();
 
-    // Wallet fallbacks
-    expect(screen.getAllByText('not enough trades yet').length).toBe(3);
+    // Wallet fallbacks use em-dash + single note
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('— means not enough trades yet.')).toBeInTheDocument();
 
     // Explain score expand & preserve across refresh
     const explainBtns = screen.getAllByRole('button', { name: 'Explain score' });
     fireEvent.click(explainBtns[0]);
-    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
-    expect(screen.getByText('Missing data counts as 0 points and caps the score at 79.')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Hide' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Missing data counts as 0 points and caps the score at 79.').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Hide' }).length).toBeGreaterThan(0);
       expect(screen.getByText('word6')).toBeInTheDocument();
     });
   });
@@ -284,9 +287,11 @@ describe('Cheesequake UI', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/Safe to hold/).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/Red flag/).length).toBeGreaterThan(0);
+      expect(screen.getByText('Safe to hold')).toBeInTheDocument();
+      expect(screen.getByText('Red flag')).toBeInTheDocument();
     });
+    expect(screen.getAllByText('Score').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('78/100').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Mint authority is still active/).length).toBeGreaterThan(0);
     expect(screen.getByText('creator sell')).toBeInTheDocument();
     expect(document.querySelectorAll('iframe').length).toBe(0);
@@ -351,14 +356,14 @@ describe('Cheesequake UI', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
 
-    const watchingBtn = await screen.findByRole('button', { name: 'Watching' });
-    expect(watchingBtn).toHaveAttribute('aria-pressed', 'true');
+    const watchingBtns = await screen.findAllByRole('button', { name: 'Watching' });
+    expect(watchingBtns[0]).toHaveAttribute('aria-pressed', 'true');
 
-    fireEvent.click(watchingBtn);
+    fireEvent.click(watchingBtns[0]);
     await waitFor(() => {
       expect(calls.some((c) => c.method === 'DELETE' && c.url.includes(mintWatched))).toBe(true);
-      const watchBtn = screen.getByRole('button', { name: 'Watch' });
-      expect(watchBtn).toHaveAttribute('aria-pressed', 'false');
+      const watchBtns = screen.getAllByRole('button', { name: 'Watch' });
+      expect(watchBtns[0]).toHaveAttribute('aria-pressed', 'false');
     });
   });
 
@@ -455,8 +460,11 @@ describe('Cheesequake UI', () => {
 
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByText('64')).toBeInTheDocument();
+      const kpi = screen.getByText('64');
+      expect(kpi).toHaveClass('text-3xl');
       expect(screen.getByRole('img', { name: 'Trench index, last 30 days' })).toBeInTheDocument();
+      expect(screen.getByText('Euphoria')).toBeInTheDocument();
+      expect(screen.getByText('Cold')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));
@@ -520,8 +528,8 @@ describe('Cheesequake UI', () => {
     const walletSelect = screen.getByLabelText('Wallet');
     expect(kindSelect).toHaveClass('glass-input', 'glass-select', 'min-h-[44px]');
     expect(walletSelect).toHaveClass('glass-input', 'glass-select', 'min-h-[44px]');
-    const watchBtn = await screen.findByRole('button', { name: 'Watching' });
-    expect(watchBtn).toHaveClass('min-h-[44px]', 'px-3.5', 'py-2');
+    const watchBtns = await screen.findAllByRole('button', { name: 'Watching' });
+    expect(watchBtns[0]).toHaveClass('min-h-[44px]', 'px-3.5', 'py-2');
 
     // Tracer tab: start wallet input
     fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));

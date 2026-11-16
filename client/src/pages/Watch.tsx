@@ -36,7 +36,6 @@ function WatchCard({
     ? coin.symbol + (coin.name ? ` (${coin.name})` : '')
     : short(coin.mint);
   const reasons = coin.reasons || [];
-  const badgeText = reasons.length ? `${label} — ${reasons[0]}` : label;
   const alerts = coin.alerts || [];
 
   const scoreTxt =
@@ -69,7 +68,7 @@ function WatchCard({
         <div className="flex flex-wrap items-center gap-2.5">
           <h3 className="text-base font-semibold text-[#f4ede2]">{title}</h3>
           <AddressLink address={coin.mint} />
-          <Badge tone={tone}>{badgeText}</Badge>
+          <Badge tone={tone}>{label}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -107,12 +106,24 @@ function WatchCard({
         </ul>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#cfc3b4] tabular-nums">
-        <span>Score: {scoreTxt}</span>
-        <span>Price: {priceTxt}</span>
-        <span>Market cap: {mcapTxt}</span>
-        <span>Liquidity: {liqTxt}</span>
-      </div>
+      <dl className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:flex sm:flex-wrap tabular-nums">
+        <div>
+          <dt className="text-xs text-[#cfc3b4]">Score</dt>
+          <dd className="text-sm font-medium text-[#f4ede2]">{scoreTxt}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[#cfc3b4]">Price</dt>
+          <dd className="text-sm font-medium text-[#f4ede2]">{priceTxt}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[#cfc3b4]">Market cap</dt>
+          <dd className="text-sm font-medium text-[#f4ede2]">{mcapTxt}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[#cfc3b4]">Liquidity</dt>
+          <dd className="text-sm font-medium text-[#f4ede2]">{liqTxt}</dd>
+        </div>
+      </dl>
 
       {chartOpen && (
         <div className="my-3">

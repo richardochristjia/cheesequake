@@ -39,12 +39,12 @@ export function Card({
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>
             {title && (
-              <h2 className="text-base font-semibold tracking-tight text-[#f4ede2]">
+              <h2 className="text-lg font-semibold tracking-tight text-[#f4ede2]">
                 {title}
               </h2>
             )}
             {subtitle && (
-              <p className="mt-1 text-sm text-[#ebe2d5] max-w-prose">
+              <p className="mt-1 text-sm text-[#cfc3b4] max-w-prose">
                 {subtitle}
               </p>
             )}
@@ -68,7 +68,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${TONE_CLASSES[tone]} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-normal sm:whitespace-nowrap ${TONE_CLASSES[tone]} ${className}`}
     >
       {children}
     </span>
