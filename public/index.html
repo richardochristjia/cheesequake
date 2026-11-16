@@ -131,10 +131,20 @@ async function market() {
 
 const watchedSet = new Set();
 const openCharts = new Set();
+let watchInit = null;
 let watchInput = '';
 function syncWatched(coins) {
   watchedSet.clear();
   for (const c of coins || []) watchedSet.add(c.mint);
+  watchInit = Promise.resolve();
+}
+function ensureWatched() {
+  if (!watchInit) {
+    watchInit = get('/api/watch').then((d) => {
+      if (d && Array.isArray(d.coins)) syncWatched(d.coins);
+    });
+  }
+  return watchInit;
 }
 async function toggleWatch(mint, after) {
   const method = watchedSet.has(mint) ? 'DELETE' : 'POST';
@@ -238,7 +248,7 @@ async function watch() {
 
 let pingKind = '';
 async function ping() {
-  const d = await get('/api/ping' + (pingKind ? '?kind=' + encodeURIComponent(pingKind) : ''));
+  const [d] = await Promise.all([get('/api/ping' + (pingKind ? '?kind=' + encodeURIComponent(pingKind) : '')), ensureWatched()]);
   const sel = h('select', { 'aria-label': 'Alert kind' }, ['', 'buy', 'sell', 'consensus', 'exit'].map((k) => h('option', { value: k }, k || 'all')));
   sel.value = pingKind;
   sel.onchange = () => { pingKind = sel.value; ping(); };
@@ -437,7 +447,7 @@ function renderThemes(themes) {
 }
 
 async function narratives() {
-  const n = await get('/api/narratives');
+  const [n] = await Promise.all([get('/api/narratives'), ensureWatched()]);
   const calEmpty = 'No results yet. The tool checks each coin\'s price 1, 6 and 24 hours later.' + (n.calibration.missed ? ' Missed: ' + n.calibration.missed + '.' : '');
   put('narratives',
     card('Running now',

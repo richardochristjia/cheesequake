@@ -192,17 +192,18 @@ export function watchList(db, now, config = defaultConfig) {
   const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
   const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
   const getAlerts = db.prepare('SELECT ts, kind, mint, wallet, detail FROM alerts WHERE mint = ? ORDER BY ts DESC, id DESC LIMIT 50');
+  const getExits = db.prepare("SELECT DISTINCT kind FROM alerts WHERE mint = ? AND ts > ? AND kind LIKE 'exit_%'");
 
   return rows.map(({ mint, added_ts }) => {
     const tok = getTok.get(mint);
     const snap = getSnap.get(mint);
     const cand = getCand.get(mint);
     const alerts = getAlerts.all(mint).map((a) => ({ ...a, detail: JSON.parse(a.detail || '{}') }));
+    const exits = new Set(getExits.all(mint, nowS - 86400).map((r) => r.kind));
     const vetoes = cand ? JSON.parse(cand.vetoes || '[]') : [];
     const unknowns = cand ? JSON.parse(cand.unknowns || '[]') : [];
     const scoreReasons = cand ? JSON.parse(cand.reasons || '[]') : [];
-    const recent = alerts.filter((a) => a.ts > nowS - 86400);
-    const hasAlert = (k) => recent.some((a) => a.kind === k);
+    const hasAlert = (k) => exits.has(k);
 
     const flagVetoes = vetoes.filter((v) => v !== 'age');
     const isFlag = flagVetoes.length > 0 || hasAlert('exit_deployer') || hasAlert('exit_liquidity');

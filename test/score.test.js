@@ -147,11 +147,19 @@ test('watchList classifies safe, caution, and flag coins with plain-English reas
 
   db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,0,'avoid',0,'[\"mint_authority\"]','[]','[]',0.01,10000)").run(NOWS - 30, mFlag);
   db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'exit_deployer',?,?,'{\"side\":\"sell\"}','ed1')").run(NOWS - 50, mFlag, addr('D'));
+  const insBuy = db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'buy',?,?,'{\"usd\":10}',?)");
+  for (let i = 0; i < 55; i++) insBuy.run(NOWS - 40 + (i % 30), mFlag, addr('W'), `b-${i}`);
+
+  const mExitOnly = addr('E');
+  insW.run(mExitOnly, 150);
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,75,'confirm',1,'[]','[]','[]',0.1,100000)").run(NOWS - 30, mExitOnly);
+  db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'exit_deployer',?,?,'{\"side\":\"sell\"}','ed2')").run(NOWS - 50, mExitOnly, addr('D'));
+  for (let i = 0; i < 55; i++) insBuy.run(NOWS - 40 + (i % 30), mExitOnly, addr('W'), `be-${i}`);
 
   const list = watchList(db, NOW);
-  assert.deepEqual(list.map((x) => x.mint), [mSafe, mCaution, mFlag, mUnscanned]);
+  assert.deepEqual(list.map((x) => x.mint), [mSafe, mCaution, mFlag, mExitOnly, mUnscanned]);
 
-  const [safeCoin, cautionCoin, flagCoin, unscannedCoin] = list;
+  const [safeCoin, cautionCoin, flagCoin, exitOnlyCoin, unscannedCoin] = list;
   assert.equal(safeCoin.status, 'safe');
   assert.equal(safeCoin.label, 'Safe to hold');
   assert.equal(safeCoin.pool, addr('P'));
@@ -166,8 +174,14 @@ test('watchList classifies safe, caution, and flag coins with plain-English reas
 
   assert.equal(flagCoin.status, 'flag');
   assert.equal(flagCoin.label, 'Red flag');
+  assert.equal(flagCoin.alerts.length, 50);
   assert.match(flagCoin.reasons.join(' '), /Mint authority is still active/);
   assert.match(flagCoin.reasons.join(' '), /Creator wallet sold/);
+
+  assert.equal(exitOnlyCoin.status, 'flag');
+  assert.equal(exitOnlyCoin.label, 'Red flag');
+  assert.equal(exitOnlyCoin.alerts.length, 50);
+  assert.match(exitOnlyCoin.reasons.join(' '), /Creator wallet sold/);
 
   assert.equal(unscannedCoin.status, 'caution');
   assert.match(unscannedCoin.reasons.join(' '), /Waiting for first safety scan/);

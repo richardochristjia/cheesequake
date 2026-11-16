@@ -342,3 +342,33 @@ test('Watch tab renders hold badges, plain-English reasons, ping table, and togg
   assert.ok(calls.some((c) => c.method === 'POST' && c.url.includes(mintNew)));
   assert.match(root.text, /Waiting for first safety scan/);
 });
+
+test('Narratives hydrates watchedSet before visiting Watch so watched coins render as Watching and unwatch on click', async () => {
+  const mintWatched = addr('W');
+  const seeded = [
+    {
+      mint: mintWatched, symbol: 'WTC', name: 'Watched Coin', pool: addr('P'),
+      status: 'safe', label: 'Safe to hold', score: 80, price_usd: 0.1, mcap_usd: 100000, liquidity_usd: 50000,
+      reasons: ['Passed all safety checks with no recent exit alerts'], alerts: [],
+    },
+  ];
+  const payload = {
+    running: [{ mint: mintWatched, symbol: 'WTC', theme: null, score: 80, band: 'strong', mcap_usd: 100000, reasons: [], unknowns: [] }],
+    themes: [],
+    wallets: [],
+    calibration: { rows: [], missed: 0 },
+  };
+  const { narratives, els, calls } = loadDashboard(payload, seeded);
+  await narratives();
+
+  const root = els.get('narratives');
+  const toggleBtn = root.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Watch' || e.text === 'Watching'))[0];
+  assert.equal(toggleBtn.text, 'Watching');
+  assert.equal(toggleBtn.getAttribute('aria-pressed'), 'true');
+
+  await toggleBtn.onclick();
+  assert.ok(calls.some((c) => c.method === 'DELETE' && c.url.includes(mintWatched)));
+  const refreshedBtn = root.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Watch' || e.text === 'Watching'))[0];
+  assert.equal(refreshedBtn.text, 'Watch');
+  assert.equal(refreshedBtn.getAttribute('aria-pressed'), 'false');
+});
