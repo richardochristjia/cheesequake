@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { openDb } from '../src/db.js';
+import { upsertTokens } from '../src/market.js';
+import { parsePair } from '../src/sources/dexscreener.js';
 import { scoreParts, capScore, runCandidates, runningNow, watchedMints, watchList } from '../src/score.js';
 
 const addr = (c) => c.repeat(4) + '1'.repeat(36);
@@ -185,4 +191,56 @@ test('watchList classifies safe, caution, and flag coins with plain-English reas
 
   assert.equal(unscannedCoin.status, 'caution');
   assert.match(unscannedCoin.reasons.join(' '), /Waiting for first safety scan/);
+});
+
+test('openDb migrates existing tokens table lacking image_url without losing rows', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sf-db-mig-'));
+  const dbPath = join(dir, 'legacy.db');
+  try {
+    const legacy = new DatabaseSync(dbPath);
+    legacy.exec('CREATE TABLE tokens(mint PRIMARY KEY, symbol, name, description, creator, first_seen)');
+    legacy.prepare('INSERT INTO tokens(mint, symbol, name, first_seen) VALUES (?,?,?,?)').run(MINT, 'LEG', 'Legacy', NOWS);
+    legacy.close();
+
+    const db = openDb(dbPath);
+    const cols = db.prepare('PRAGMA table_info(tokens)').all();
+    assert.ok(cols.some((c) => c.name === 'image_url'));
+    const row = db.prepare('SELECT mint, symbol, image_url FROM tokens WHERE mint = ?').get(MINT);
+    assert.deepEqual({ ...row }, { mint: MINT, symbol: 'LEG', image_url: null });
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('parsePair extracts image_url and upsertTokens preserves non-null image_url', () => {
+  assert.equal(
+    parsePair({ baseToken: { address: MINT }, info: { imageUrl: 'https://cdn.example/tok.png' } }).image_url,
+    'https://cdn.example/tok.png',
+  );
+  assert.equal(parsePair({ baseToken: { address: MINT } }).image_url, null);
+
+  const db = openDb(':memory:');
+  upsertTokens(db, [{ mint: MINT, symbol: 'T', name: 'Tok', image_url: 'https://cdn.example/tok.png' }], NOWS);
+  upsertTokens(db, [{ mint: MINT, symbol: 'T', name: 'Tok', image_url: null }], NOWS + 10);
+  const row = db.prepare('SELECT image_url FROM tokens WHERE mint = ?').get(MINT);
+  assert.equal(row.image_url, 'https://cdn.example/tok.png');
+});
+
+test('watchList returns latest vol_h24 and image_url with null defaults', () => {
+  const db = openDb(':memory:');
+  const mWith = addr('A');
+  const mWithout = addr('B');
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(mWith, NOWS);
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(mWithout, NOWS - 10);
+
+  upsertTokens(db, [{ mint: mWith, symbol: 'WTH', name: 'WithImg', image_url: 'https://cdn.example/with.png' }], NOWS);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, price_usd, mcap_usd, liquidity_usd, vol_h24) VALUES (?,'trending',?,?,0.01,100000,20000,1000)").run(NOWS - 120, addr('P'), mWith);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, price_usd, mcap_usd, liquidity_usd, vol_h24) VALUES (?,'trending',?,?,0.02,200000,30000,25000)").run(NOWS - 10, addr('P'), mWith);
+
+  const [withCoin, withoutCoin] = watchList(db, NOW);
+  assert.equal(withCoin.vol_h24, 25000);
+  assert.equal(withCoin.image_url, 'https://cdn.example/with.png');
+  assert.equal(withoutCoin.vol_h24, null);
+  assert.equal(withoutCoin.image_url, null);
 });

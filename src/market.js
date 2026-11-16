@@ -21,8 +21,8 @@ export const median = (xs) => {
 };
 
 export function upsertTokens(db, rows, ts) {
-  const ins = db.prepare('INSERT INTO tokens(mint, symbol, name, first_seen) VALUES (?,?,?,?) ON CONFLICT(mint) DO NOTHING');
-  for (const r of rows) if (r.mint) ins.run(r.mint, r.symbol, r.name, ts);
+  const ins = db.prepare('INSERT INTO tokens(mint, symbol, name, first_seen, image_url) VALUES (?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET image_url = COALESCE(excluded.image_url, tokens.image_url)');
+  for (const r of rows) if (r.mint) ins.run(r.mint, r.symbol, r.name, ts, r.image_url ?? null);
 }
 
 // Every 60 s: new pools page, snapshots, one market sample.

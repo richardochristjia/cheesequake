@@ -22,6 +22,7 @@ export function parsePair(p) {
     buyers_h1: null, // DexScreener gives trade counts, not unique buyers
     buyers_h6: null,
     chg_h1: num(p.priceChange?.h1),
+    image_url: p.info?.imageUrl ?? null,
   };
 }
 

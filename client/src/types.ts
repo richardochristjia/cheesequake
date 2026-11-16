@@ -54,6 +54,8 @@ export interface WatchCoin {
   price_usd: number | null;
   mcap_usd: number | null;
   liquidity_usd: number | null;
+  vol_h24: number | null;
+  image_url: string | null;
   reasons: string[];
   alerts: AlertItem[];
 }

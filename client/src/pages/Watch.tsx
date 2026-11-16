@@ -29,6 +29,17 @@ function WatchCard({
   onUnwatch: (mint: string) => void;
 }) {
   const [chartOpen, setChartOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [coin.image_url]);
+
+  const monogram =
+    (coin.symbol || coin.mint)
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(0, 2)
+      .toUpperCase() || '?';
 
   const tone = STATUS_TONE[coin.status] || 'mid';
   const label = coin.label || STATUS_LABEL[coin.status] || 'Caution';
@@ -54,6 +65,18 @@ function WatchCard({
     coin.liquidity_usd === null || coin.liquidity_usd === undefined
       ? 'unknown'
       : `$${fmt(coin.liquidity_usd)}`;
+  const volTxt =
+    coin.vol_h24 === null || coin.vol_h24 === undefined
+      ? 'unknown'
+      : `$${fmt(coin.vol_h24)}`;
+
+  const stats = [
+    { label: 'Score', value: scoreTxt },
+    { label: 'Price', value: priceTxt },
+    { label: 'Market cap', value: mcapTxt },
+    { label: 'Liquidity', value: liqTxt },
+    { label: '24h Volume', value: volTxt },
+  ];
 
   const borderTone =
     tone === 'good'
@@ -66,6 +89,21 @@ function WatchCard({
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2.5">
+          {coin.image_url && !imgError ? (
+            <img
+              src={coin.image_url}
+              alt={coin.symbol || short(coin.mint)}
+              onError={() => setImgError(true)}
+              className="h-9 w-9 shrink-0 rounded-full border border-[#2d251d] bg-[#211c16] object-cover"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#2d251d] bg-[#211c16] text-xs font-semibold text-[#e59a28]"
+            >
+              {monogram}
+            </div>
+          )}
           <h3 className="text-base font-semibold text-[#f4ede2]">{title}</h3>
           <AddressLink address={coin.mint} />
           <Badge tone={tone}>{label}</Badge>
@@ -106,24 +144,19 @@ function WatchCard({
         </ul>
       </div>
 
-      <dl className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:flex sm:flex-wrap tabular-nums">
-        <div>
-          <dt className="text-xs text-[#cfc3b4]">Score</dt>
-          <dd className="text-sm font-medium text-[#f4ede2]">{scoreTxt}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#cfc3b4]">Price</dt>
-          <dd className="text-sm font-medium text-[#f4ede2]">{priceTxt}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#cfc3b4]">Market cap</dt>
-          <dd className="text-sm font-medium text-[#f4ede2]">{mcapTxt}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[#cfc3b4]">Liquidity</dt>
-          <dd className="text-sm font-medium text-[#f4ede2]">{liqTxt}</dd>
-        </div>
-      </dl>
+      <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 tabular-nums">
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 px-3 py-2"
+          >
+            <div className="text-xs text-[#cfc3b4]">{s.label}</div>
+            <div className="mt-0.5 truncate text-sm font-medium text-[#f4ede2]">
+              {s.value}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {chartOpen && (
         <div className="my-3">

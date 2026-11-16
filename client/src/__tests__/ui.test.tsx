@@ -257,13 +257,13 @@ describe('Cheesequake UI', () => {
     const coins: WatchCoin[] = [
       {
         mint: mintSafe, symbol: 'GOOD', name: 'Good Coin', pool: poolSafe,
-        status: 'safe', label: 'Safe to hold', score: 78, price_usd: 0.025, mcap_usd: 250000, liquidity_usd: 55000,
+        status: 'safe', label: 'Safe to hold', score: 78, price_usd: 0.025, mcap_usd: 250000, liquidity_usd: 55000, vol_h24: 120000, image_url: null,
         reasons: ['Passed all safety checks with no recent exit alerts'],
         alerts: [{ ts: 1700000000, kind: 'consensus', mint: mintSafe, wallet: null, detail: { wallets: ['a', 'b', 'c'], mcap: 200000 } }],
       },
       {
         mint: mintFlag, symbol: 'RUG', name: 'Rug Coin', pool: null,
-        status: 'flag', label: 'Red flag', score: 0, price_usd: 0.0001, mcap_usd: 1000, liquidity_usd: 500,
+        status: 'flag', label: 'Red flag', score: 0, price_usd: 0.0001, mcap_usd: 1000, liquidity_usd: 500, vol_h24: null, image_url: null,
         reasons: ['Mint authority is still active (new tokens can be minted)'],
         alerts: [{ ts: 1700000100, kind: 'exit_deployer', mint: mintFlag, wallet: addr('D'), detail: { side: 'sell' } }],
       },
@@ -276,7 +276,7 @@ describe('Cheesequake UI', () => {
         if (url.startsWith('/api/watch') && method === 'POST') {
           coins.push({
             mint: mintNew, symbol: null, name: null, pool: null,
-            status: 'caution', label: 'Caution', score: null, price_usd: null, mcap_usd: null, liquidity_usd: null,
+            status: 'caution', label: 'Caution', score: null, price_usd: null, mcap_usd: null, liquidity_usd: null, vol_h24: null, image_url: null,
             reasons: ['Waiting for first safety scan'], alerts: [],
           });
         }
@@ -535,5 +535,75 @@ describe('Cheesequake UI', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));
     const tracerInput = screen.getByLabelText('Start wallet address');
     expect(tracerInput).toHaveClass('glass-input', 'min-h-[44px]');
+  });
+
+  it('WatchCard renders 5 equal-width metric cards including 24h Volume and token image with monogram fallback', async () => {
+    const coins: WatchCoin[] = [
+      {
+        mint: addr('A'),
+        symbol: 'GOOD',
+        name: 'Good Coin',
+        pool: addr('P'),
+        status: 'safe',
+        label: 'Safe to hold',
+        score: 88,
+        price_usd: 0.05,
+        mcap_usd: 500000,
+        liquidity_usd: 75000,
+        vol_h24: 123456,
+        image_url: 'https://cdn.example/good.png',
+        reasons: ['Passed all safety checks'],
+        alerts: [],
+      },
+      {
+        mint: addr('B'),
+        symbol: 'NOIMG',
+        name: 'No Image Coin',
+        pool: null,
+        status: 'caution',
+        label: 'Caution',
+        score: 50,
+        price_usd: 0.01,
+        mcap_usd: 10000,
+        liquidity_usd: 5000,
+        vol_h24: null,
+        image_url: null,
+        reasons: ['Missing safety or market data'],
+        alerts: [],
+      },
+    ];
+    globalThis.fetch = mockFetch({
+      watch: () => ({ ok: true, coins }),
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('GOOD (Good Coin)')).toBeInTheDocument();
+      expect(screen.getByText('NOIMG (No Image Coin)')).toBeInTheDocument();
+    });
+
+    // 5 equal-width stat cards per WatchCard
+    const grids = document.querySelectorAll('.lg\\:grid-cols-5');
+    expect(grids.length).toBe(2);
+    expect(grids[0].children.length).toBe(5);
+    expect(screen.getAllByText('Score').length).toBe(2);
+    expect(screen.getAllByText('Price').length).toBe(2);
+    expect(screen.getAllByText('Market cap').length).toBe(2);
+    expect(screen.getAllByText('Liquidity').length).toBe(2);
+    expect(screen.getAllByText('24h Volume').length).toBe(2);
+    expect(screen.getByText('$123,456')).toBeInTheDocument();
+    expect(screen.getByText('unknown')).toBeInTheDocument();
+
+    // Token image and monogram fallback
+    const img = screen.getByRole('img', { name: 'GOOD' });
+    expect(img).toHaveAttribute('src', 'https://cdn.example/good.png');
+    expect(screen.getByText('NO')).toBeInTheDocument();
+
+    // Error event on image falls back to monogram
+    fireEvent.error(img);
+    expect(screen.queryByRole('img', { name: 'GOOD' })).not.toBeInTheDocument();
+    expect(screen.getByText('GO')).toBeInTheDocument();
   });
 });

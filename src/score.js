@@ -117,7 +117,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     const b = buyersOf.get(mint);
     m.buyers_h1 = b?.buyers_h1 ?? null;
     m.buyers_h6 = b?.buyers_h6 ?? null;
-    if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen) VALUES (?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description').run(mint, m.symbol, m.name, descOf.get(mint), nowS);
+    if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen, image_url) VALUES (?,?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description, image_url = COALESCE(excluded.image_url, tokens.image_url)').run(mint, m.symbol, m.name, descOf.get(mint), nowS, m.image_url ?? null);
   }
   storeSnapshots(db, [...markets.values()], 'candidate', nowS);
 
@@ -212,8 +212,8 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
   const nowS = Math.floor(now / 1000);
   const labelOf = wallets instanceof Map ? wallets : new Map((wallets || []).filter((w) => w?.label).map((w) => [w.address, w.label]));
   const rows = db.prepare('SELECT mint, added_ts FROM watched_coins ORDER BY added_ts DESC').all();
-  const getTok = db.prepare('SELECT symbol, name, creator FROM tokens WHERE mint = ?');
-  const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
+  const getTok = db.prepare('SELECT symbol, name, creator, image_url FROM tokens WHERE mint = ?');
+  const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, vol_h24, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
   const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
   const getRep = db.prepare('SELECT json FROM reports WHERE mint = ?');
   const getAlerts = db.prepare('SELECT ts, kind, mint, wallet, detail FROM alerts WHERE mint = ? ORDER BY ts DESC, id DESC LIMIT 50');
@@ -261,6 +261,8 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
       price_usd: snap?.price_usd ?? cand?.price_usd ?? null,
       mcap_usd: snap?.mcap_usd ?? cand?.mcap_usd ?? null,
       liquidity_usd: snap?.liquidity_usd ?? null,
+      vol_h24: snap?.vol_h24 ?? null,
+      image_url: tok?.image_url ?? null,
       score: cand ? cand.score : null,
       band: cand ? cand.band : null,
       ts: cand ? cand.ts : null,
