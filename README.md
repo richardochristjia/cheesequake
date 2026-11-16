@@ -40,4 +40,4 @@ One wallet per line: `<address>[,<label>]`. `#` starts a comment. Bad lines are 
 - Holder, insider and lock data come from one source.
 - Social media data is not an input.
 - Keyword themes are crude. Scores are unvalidated until the outcome log has weeks of data.
-- Wallet history is not backfilled: a wallet is watched from the moment the program first sees it.
+- Tracked wallets backfill only their recent transactions on first sight (up to 20 non-error transactions from the latest 100 signatures) without raising alerts; older history is not fetched.

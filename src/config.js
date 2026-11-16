@@ -25,6 +25,7 @@ export const config = Object.freeze({
   outcome: { horizonsHours: [1, 6, 24] },
   tracer: { depth: 4, signatures: 10, top: 2, cacheHours: 24 },
   theme: { minTokens: 3 },
+  walletPoll: { sigLimit: 100, txLimit: 20, backfillTxLimit: 20 },
 });
 
 export const bandOf = (score) => config.bands.find(([, min]) => score >= min)[0];

@@ -22,7 +22,11 @@ export function fakeRpc(book) {
     async signatures(w, { limit, until }) {
       const all = [...(book[w] || [])].reverse(); // newest first
       const i = until ? all.findIndex((s) => s.signature === until) : -1;
-      return (i >= 0 ? all.slice(0, i) : all).slice(0, limit).map((s) => ({ signature: s.signature, blockTime: s.tx.blockTime }));
+      return (i >= 0 ? all.slice(0, i) : all).slice(0, limit).map((s) => ({
+        signature: s.signature,
+        blockTime: s.blockTime ?? s.tx?.blockTime,
+        err: s.err ?? s.tx?.meta?.err ?? null,
+      }));
     },
     async transaction(sig) {
       calls.tx++;

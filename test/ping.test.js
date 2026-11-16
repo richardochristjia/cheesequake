@@ -8,23 +8,104 @@ import { tx, fakeRpc, addr } from './helpers.js';
 async function scenario(times, extra = {}) {
   const db = openDb(':memory:');
   const wallets = times.map((_, i) => addr(String.fromCharCode(65 + i)));
-  const book = Object.fromEntries(wallets.map((w) => [w, [{ signature: `old-${w}`, tx: tx({ wallet: w, blockTime: 1 }) }]]));
+  const book = Object.fromEntries(wallets.map((w) => [w, [{ signature: `old-${w}`, tx: tx({ wallet: w, mint: addr('O'), blockTime: 1 }) }]]));
   const rpc = fakeRpc(book);
   const run = () => runWalletCycle({ db, rpc, tracked: wallets, solUsd: 100, now: () => 1e12, ...extra });
-  await run(); // first cycle sets cursors
+  await run(); // first cycle backfills silently and sets cursors
   wallets.forEach((w, i) => book[w].push({ signature: `buy-${w}`, tx: tx({ wallet: w, blockTime: times[i] }) }));
   await run();
   return db;
 }
 const count = (db, kind) => db.prepare('SELECT COUNT(*) c FROM alerts WHERE kind = ?').get(kind).c;
 
-test('first cycle sets cursor and fetches no transactions', async () => {
+test('first cycle silently backfills tracked wallet up to backfillTxLimit with 0 alerts', async () => {
   const db = openDb(':memory:');
   const w = addr('A');
-  const rpc = fakeRpc({ [w]: [{ signature: 's1', tx: tx({ wallet: w }) }] });
+  const sigs = Array.from({ length: 25 }, (_, i) => ({
+    signature: `s${i + 1}`,
+    tx: tx({ wallet: w, blockTime: 100 + i }),
+  }));
+  const rpc = fakeRpc({ [w]: sigs });
   await runWalletCycle({ db, rpc, tracked: [w], solUsd: 100, now: () => 1e12 });
-  assert.equal(rpc.calls.tx, 0);
-  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor').get().last_sig, 's1');
+  assert.equal(rpc.calls.tx, 20);
+  const trades = db.prepare('SELECT sig FROM trades ORDER BY ts ASC').all().map((r) => r.sig);
+  assert.equal(trades.length, 20);
+  assert.equal(trades[0], 's6');
+  assert.equal(trades[19], 's25');
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(w).last_sig, 's25');
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM alerts').get().c, 0);
+});
+
+test('first cycle on untracked deployer sets cursor with limit 1 and fetches 0 transactions', async () => {
+  const db = openDb(':memory:');
+  const d = addr('D');
+  let lastLimit = null;
+  const baseRpc = fakeRpc({ [d]: [{ signature: 'd1', tx: tx({ wallet: d }) }, { signature: 'd2', tx: tx({ wallet: d }) }] });
+  const rpc = {
+    ...baseRpc,
+    signatures(wallet, opts) {
+      lastLimit = opts?.limit;
+      return baseRpc.signatures(wallet, opts);
+    },
+  };
+  await runWalletCycle({ db, rpc, tracked: [], deployers: [d], solUsd: 100, now: () => 1e12 });
+  assert.equal(lastLimit, 1);
+  assert.equal(baseRpc.calls.tx, 0);
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(d).last_sig, 'd2');
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM trades').get().c, 0);
+});
+
+test('skips signatures with err != null without calling rpc.transaction and advances cursor', async () => {
+  const db = openDb(':memory:');
+  const w1 = addr('A');
+  const w2 = addr('B');
+  const book = {
+    [w1]: [
+      { signature: 'ok1', tx: tx({ wallet: w1, blockTime: 10 }) },
+      { signature: 'err1', err: { InstructionError: [0, 'Custom'] }, tx: tx({ wallet: w1, blockTime: 20 }) },
+    ],
+    [w2]: [
+      { signature: 'only-err-1', err: 'failed', tx: tx({ wallet: w2, blockTime: 10 }) },
+      { signature: 'only-err-2', err: 'failed', tx: tx({ wallet: w2, blockTime: 20 }) },
+    ],
+  };
+  const rpc = fakeRpc(book);
+  await runWalletCycle({ db, rpc, tracked: [w1, w2], solUsd: 100, now: () => 1e12 });
+  assert.equal(rpc.calls.tx, 1);
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(w1).last_sig, 'err1');
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(w2).last_sig, 'only-err-2');
+
+  // Subsequent live poll also skips failed signatures and advances cursor to newest
+  book[w1].push(
+    { signature: 'err2', err: 'failed', tx: tx({ wallet: w1, blockTime: 30 }) },
+    { signature: 'ok2', tx: tx({ wallet: w1, blockTime: 40 }) },
+    { signature: 'err3', err: 'failed', tx: tx({ wallet: w1, blockTime: 50 }) },
+  );
+  await runWalletCycle({ db, rpc, tracked: [w1, w2], solUsd: 100, now: () => 1e12 });
+  assert.equal(rpc.calls.tx, 2);
+  assert.equal(db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(w1).last_sig, 'err3');
+  assert.equal(count(db, 'buy'), 1);
+});
+
+test('subsequent cycles after initial backfill record new trades and fire buy, sell, and consensus alerts', async () => {
+  const db = openDb(':memory:');
+  const wallets = ['A', 'B', 'C'].map(addr);
+  const book = Object.fromEntries(wallets.map((w) => [w, [{ signature: `init-${w}`, tx: tx({ wallet: w, mint: addr('O'), blockTime: 100 }) }]]));
+  const rpc = fakeRpc(book);
+  const run = () => runWalletCycle({ db, rpc, tracked: wallets, solUsd: 100, now: () => 1e12 });
+
+  await run();
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM trades').get().c, 3);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM alerts').get().c, 0);
+
+  wallets.forEach((w, i) => book[w].push({ signature: `buy-${w}`, tx: tx({ wallet: w, mint: addr('M'), blockTime: 1000 + i * 60 }) }));
+  book[wallets[0]].push({ signature: `sell-${wallets[0]}`, tx: tx({ wallet: wallets[0], mint: addr('M'), token: -100, sol: 1, blockTime: 1300 }) });
+  await run();
+
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM trades').get().c, 7);
+  assert.equal(count(db, 'buy'), 3);
+  assert.equal(count(db, 'sell'), 1);
+  assert.equal(count(db, 'consensus'), 1);
 });
 
 test('three wallets in 40 minutes, then a fourth: one consensus alert', async () => {

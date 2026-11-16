@@ -9,18 +9,27 @@ export function insertAlert(db, { ts, kind, mint = null, wallet = null, detail =
 
 const MAX_NULL_CYCLES = 3;
 
-// One wallet, one cycle. Returns the trades recorded. No backfill: first sight only sets the cursor.
+// One wallet, one cycle. Returns the trades recorded. Tracked wallets backfill silently on first sight; untracked only set the cursor.
 export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligible = (w) => scorecardFor(db, w, config).class !== 'sniper', config = defaultConfig }) {
   const cur = db.prepare('SELECT last_sig FROM wallet_cursor WHERE address = ?').get(wallet)?.last_sig;
   const setCursor = db.prepare('INSERT INTO wallet_cursor(address, last_sig) VALUES (?,?) ON CONFLICT(address) DO UPDATE SET last_sig = excluded.last_sig');
-  if (!cur) {
+  if (!cur && !tracked.has(wallet)) {
     const [first] = await rpc.signatures(wallet, { limit: 1 });
     if (first) setCursor.run(wallet, first.signature);
     return [];
   }
-  const sigs = (await rpc.signatures(wallet, { limit: 20, until: cur })).reverse();
+  const backfill = !cur;
+  const { sigLimit = 100, txLimit = 20, backfillTxLimit = 20 } = config.walletPoll ?? defaultConfig.walletPoll;
+  const maxTx = backfill ? backfillTxLimit : txLimit;
+  const allSigs = await rpc.signatures(wallet, { limit: sigLimit, ...(cur ? { until: cur } : {}) });
+  let ok = 0;
+  const sigs = allSigs.filter((s) => s.err != null || ++ok <= maxTx).reverse();
   const recorded = [];
   for (const s of sigs) {
+    if (s.err != null) {
+      setCursor.run(wallet, s.signature);
+      continue;
+    }
     const tx = await rpc.transaction(s.signature);
     if (!tx) {
       // Fresh signatures can be unavailable; retry next cycle, give up after 3.
@@ -36,7 +45,7 @@ export async function pollWallet({ db, rpc, wallet, tracked, solUsd, now, eligib
       db.prepare('INSERT OR IGNORE INTO trades(sig, wallet, mint, side, token_amount, quote_usd, ts) VALUES (?,?,?,?,?,?,?)')
         .run(s.signature, wallet, t.mint, t.side, t.tokenAmount, t.quoteUsd, ts);
       recorded.push({ ...t, sig: s.signature, ts });
-      if (tracked.has(wallet) && (t.side === 'buy' || t.side === 'sell')) {
+      if (!backfill && tracked.has(wallet) && (t.side === 'buy' || t.side === 'sell')) {
         insertAlert(db, { ts, kind: t.side, mint: t.mint, wallet, detail: { usd: t.quoteUsd, sig: s.signature }, dedupe: `${t.side}:${s.signature}:${t.mint}` });
         if (t.side === 'buy') checkConsensus({ db, mint: t.mint, ts, tracked, eligible, config });
       }

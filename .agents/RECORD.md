@@ -46,6 +46,7 @@ Entries are added or amended **only with human approval**.
 - (data) Wallet activity is read from a Solana RPC endpoint whose address is a config setting.
 - (store) The scanner persists snapshots, wallet events and alerts to one local SQLite file.
 - (wallets) Tracked wallets are read from a user-edited text file.
+- (wallets) Newly tracked wallets are backfilled from recent on-chain transactions on first sight without raising alerts.
 - (wallets) Each tracked wallet currently carries a scorecard computed from its own recorded trades.
 - (ping) A consensus alert is raised when at least three non-sniper tracked wallets buy the same token within sixty minutes.
 - (ping) Exit alerts are raised for listed tokens on tracked-wallet sells, deployer sells and sharp liquidity drops.

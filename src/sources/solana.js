@@ -12,7 +12,7 @@ export function createRpc(get, url) {
   return {
     signatures: (address, { limit, until } = {}) =>
       call('getSignaturesForAddress', [address, { limit, ...(until ? { until } : {}) }]).then((r) => r ?? []),
-    transaction: (sig) => call('getTransaction', [sig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]),
+    transaction: (sig) => call('getTransaction', [sig, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 1 }]),
     async mintInfo(mint) {
       const r = await call('getAccountInfo', [mint, { encoding: 'jsonParsed' }]);
       const i = r?.value?.data?.parsed?.info;
