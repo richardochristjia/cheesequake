@@ -17,7 +17,7 @@ nav button { background:none; border:0; border-bottom:2px solid transparent; col
 nav button[aria-selected="true"] { color:var(--fg); border-color:var(--acc); }
 main { padding:16px; max-width:1100px; }
 section[hidden] { display:none; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:12px; overflow-x:auto; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:12px; overflow:visible; }
 .card > p.mut { margin:0; }
 h2 { font-size:16px; margin:0 0 6px; }
 table { border-collapse:collapse; width:100%; font-size:14px; }
@@ -57,6 +57,11 @@ svg { max-width:100%; height:auto; }
 .foot { color:var(--fg); font-size:13px; margin:12px 0 0; }
 .trow { display:grid; grid-template-columns:minmax(0,1.2fr) 64px minmax(0,1fr) 64px; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); }
 .more { margin-top:8px; }
+.info-tip { position:relative; display:inline-flex; align-items:center; gap:4px; }
+.info-btn { background:none; border:0; padding:0 2px; font:inherit; font-size:13px; line-height:1; color:var(--mut); cursor:pointer; border-radius:4px; }
+.info-btn:hover, .info-btn:focus-visible { color:var(--acc); }
+.tip-box { display:none; position:absolute; left:0; top:calc(100% + 6px); z-index:20; width:260px; max-width:min(280px, 75vw); padding:8px 10px; background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.18); font-size:12px; line-height:1.4; font-weight:400; white-space:normal; text-align:left; pointer-events:none; }
+.info-tip:hover .tip-box, .info-tip:focus-within .tip-box, .info-btn:focus + .tip-box, .info-btn:focus-visible + .tip-box { display:block; }
 :focus-visible { outline:2px solid var(--fg); outline-offset:2px; }
 @media (max-width:700px) {
   .grid.head { display:none; }
@@ -119,6 +124,24 @@ function consensusWallets(a) {
   return out;
 }
 const alertWalletCell = (a) => (a.wallet ? walletCell(a.wallet, a.wallet_label) : a.kind === 'consensus' ? consensusWallets(a) : '');
+const KIND_INFO = {
+  buy: 'A tracked wallet bought this coin.',
+  sell: 'A tracked wallet sold this coin.',
+  consensus: 'Multiple non-sniper tracked wallets bought this coin within a short window.',
+  exit_deployer: 'The creator (deployer) wallet sold or moved tokens — a common rug or abandonment warning.',
+  exit_wallet: 'A tracked wallet sold this coin after it was listed.',
+  exit_liquidity: 'Pool liquidity dropped sharply compared with an earlier snapshot, raising slippage or rug risk.',
+  exit_divergence: 'Trading volume rose while unique buyers fell — a sign of wash trading or thinning demand.',
+};
+function kindCell(kind) {
+  const label = kind == null ? '' : String(kind);
+  const desc = Object.hasOwn(KIND_INFO, label) ? KIND_INFO[label] : null;
+  if (!desc) return label;
+  return h('span', { class: 'info-tip' },
+    label,
+    h('button', { type: 'button', class: 'info-btn', 'aria-label': 'What ' + label + ' means' }, 'ⓘ'),
+    h('span', { class: 'tip-box', role: 'tooltip' }, desc));
+}
 const card = (title, ...kids) => h('div', { class: 'card' }, h('h2', {}, title), ...kids);
 const table = (head, rows) => h('table', {}, h('thead', {}, h('tr', {}, head.map((x) => h('th', {}, x)))), h('tbody', {}, rows.map((r) => h('tr', {}, r.map((c) => h('td', {}, c))))));
 const get = async (p) => (await fetch(p)).json();
@@ -210,7 +233,7 @@ function updateWatchedCoinCard(entry, c) {
     h('span', {}, 'Liquidity: ' + liqTxt));
   entry.alertsWrap.replaceChildren(
     alerts.length
-      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), a.kind, alertWalletCell(a), detail(a)]))
+      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), kindCell(a.kind), alertWalletCell(a), detail(a)]))
       : h('p', { class: 'mut' }, 'No alerts for this coin yet.'));
 }
 
@@ -344,7 +367,7 @@ async function ping() {
   wsel.value = pingWallet;
   wsel.onchange = () => { pingWallet = wsel.value; return ping(); };
   put('ping', card('Wallet activity', sel, ' ', wsel, d.alerts.length ? table(['Time', 'Kind', 'Coin', 'Wallet', 'Detail', ''],
-    d.alerts.map((a) => [when(a.ts), a.kind, [a.symbol ? a.symbol + ' ' : '', link(a.mint)], alertWalletCell(a), detail(a), watchBtn(a.mint, ping)]))
+    d.alerts.map((a) => [when(a.ts), kindCell(a.kind), [a.symbol ? a.symbol + ' ' : '', link(a.mint)], alertWalletCell(a), detail(a), watchBtn(a.mint, ping)]))
     : h('p', { class: 'mut' }, 'No alerts yet.')));
 }
 function detail(a) {
