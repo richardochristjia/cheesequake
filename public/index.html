@@ -165,14 +165,63 @@ function watchBtn(mint, after) {
 
 const STATUS_CLS = { safe: 'good', caution: 'mid', flag: 'bad' };
 const STATUS_LABEL = { safe: 'Safe to hold', caution: 'Caution', flag: 'Red flag' };
+const watchedCards = new Map();
+let watchFormCard = null;
+let watchListWrap = null;
+let watchEmptyCard = null;
 
-function renderWatchedCoin(c) {
+function updateWatchedCoinCard(entry, c) {
   const cls = STATUS_CLS[c.status] || 'mid';
   const label = c.label || STATUS_LABEL[c.status] || 'Caution';
   const title = c.symbol ? c.symbol + (c.name ? ' (' + c.name + ')' : '') : short(c.mint);
+  const scoreTxt = c.score === null || c.score === undefined ? 'unscanned' : c.score + '/100';
+  const priceTxt = c.price_usd === null || c.price_usd === undefined ? 'unknown' : '$' + fmt(c.price_usd, 6);
+  const mcapTxt = c.mcap_usd === null || c.mcap_usd === undefined ? 'unknown' : '$' + fmt(c.mcap_usd);
+  const liqTxt = c.liquidity_usd === null || c.liquidity_usd === undefined ? 'unknown' : '$' + fmt(c.liquidity_usd);
+  const reasons = c.reasons || [];
+  const badgeText = reasons.length ? label + ' — ' + reasons[0] : label;
+  const alerts = c.alerts || [];
+
+  entry.coin = c;
+  entry.titleEl.textContent = title;
+  entry.badgeEl.className = 'lv ' + cls;
+  entry.badgeEl.textContent = badgeText;
+  entry.statusBox.className = 'wstatus ' + cls;
+  entry.whyStrong.textContent = 'Why ' + label + ':';
+  entry.reasonsUl.replaceChildren(...reasons.map((r) => h('li', {}, r)));
+  entry.metaEl.replaceChildren(
+    h('span', {}, 'Score: ' + scoreTxt),
+    h('span', {}, 'Price: ' + priceTxt),
+    h('span', {}, 'Market cap: ' + mcapTxt),
+    h('span', {}, 'Liquidity: ' + liqTxt));
+  entry.alertsWrap.replaceChildren(
+    alerts.length
+      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), a.kind, a.wallet ? link(a.wallet) : '', detail(a)]))
+      : h('p', { class: 'mut' }, 'No alerts for this coin yet.'));
+}
+
+function createWatchedCoinCard(c) {
   const chartOpen = openCharts.has(c.mint);
   const chartBtn = h('button', { class: chartOpen ? 'go' : 'go quiet', 'aria-expanded': String(chartOpen) }, chartOpen ? 'Hide chart' : 'Show chart');
   const unwatchBtn = h('button', { class: 'go quiet' }, 'Unwatch');
+  const titleEl = h('h2', {});
+  const badgeEl = h('span', { class: 'lv' });
+  const whyStrong = h('strong', {});
+  const reasonsUl = h('ul', { class: 'wreasons' });
+  const statusBox = h('div', { class: 'wstatus' }, whyStrong, reasonsUl);
+  const metaEl = h('div', { class: 'wmeta' });
+  const alertsWrap = h('div', {});
+  const entry = { coin: c, titleEl, badgeEl, whyStrong, reasonsUl, statusBox, metaEl, chartBtn, chartWrap: null, alertsWrap, cardEl: null };
+
+  const makeIframe = () => h('iframe', {
+    class: 'chart-frame',
+    src: 'https://dexscreener.com/solana/' + encodeURIComponent(entry.coin.pool || entry.coin.mint) + '?embed=1&theme=dark&trades=0&info=0',
+    title: (entry.coin.symbol || short(entry.coin.mint)) + ' live chart',
+    loading: 'lazy',
+  });
+  const chartWrap = h('div', chartOpen ? { class: 'chart-wrap' } : { class: 'chart-wrap', hidden: '' }, ...(chartOpen ? [makeIframe()] : []));
+  entry.chartWrap = chartWrap;
+
   unwatchBtn.onclick = async () => {
     openCharts.delete(c.mint);
     const res = await fetch('/api/watch?mint=' + encodeURIComponent(c.mint), { method: 'DELETE' });
@@ -180,13 +229,6 @@ function renderWatchedCoin(c) {
     if (d && Array.isArray(d.coins)) syncWatched(d.coins);
     await watch();
   };
-  const makeIframe = () => h('iframe', {
-    class: 'chart-frame',
-    src: 'https://dexscreener.com/solana/' + encodeURIComponent(c.pool || c.mint) + '?embed=1&theme=dark&trades=0&info=0',
-    title: (c.symbol || short(c.mint)) + ' live chart',
-    loading: 'lazy',
-  });
-  const chartWrap = h('div', chartOpen ? { class: 'chart-wrap' } : { class: 'chart-wrap', hidden: '' }, ...(chartOpen ? [makeIframe()] : []));
   chartBtn.onclick = () => {
     if (openCharts.has(c.mint)) {
       openCharts.delete(c.mint);
@@ -195,61 +237,81 @@ function renderWatchedCoin(c) {
     } else {
       openCharts.add(c.mint);
       chartWrap.hidden = false;
-      chartWrap.replaceChildren(makeIframe());
+      if (!chartWrap.hasChildNodes()) chartWrap.replaceChildren(makeIframe());
     }
     const open = openCharts.has(c.mint);
     chartBtn.textContent = open ? 'Hide chart' : 'Show chart';
     chartBtn.className = open ? 'go' : 'go quiet';
     chartBtn.setAttribute('aria-expanded', String(open));
   };
-  const scoreTxt = c.score === null || c.score === undefined ? 'unscanned' : c.score + '/100';
-  const priceTxt = c.price_usd === null || c.price_usd === undefined ? 'unknown' : '$' + fmt(c.price_usd, 6);
-  const mcapTxt = c.mcap_usd === null || c.mcap_usd === undefined ? 'unknown' : '$' + fmt(c.mcap_usd);
-  const liqTxt = c.liquidity_usd === null || c.liquidity_usd === undefined ? 'unknown' : '$' + fmt(c.liquidity_usd);
-  const reasons = c.reasons || [];
-  const badgeText = reasons.length ? label + ' — ' + reasons[0] : label;
-  const alerts = c.alerts || [];
-  return h('div', { class: 'card' },
-    h('div', { class: 'whead' },
-      h('h2', {}, title),
-      link(c.mint),
-      h('span', { class: 'lv ' + cls }, badgeText),
-      h('div', { class: 'acts' }, chartBtn, unwatchBtn)),
-    h('div', { class: 'wstatus ' + cls },
-      h('strong', {}, 'Why ' + label + ':'),
-      h('ul', { class: 'wreasons' }, reasons.map((r) => h('li', {}, r)))),
-    h('div', { class: 'wmeta' },
-      h('span', {}, 'Score: ' + scoreTxt),
-      h('span', {}, 'Price: ' + priceTxt),
-      h('span', {}, 'Market cap: ' + mcapTxt),
-      h('span', {}, 'Liquidity: ' + liqTxt)),
+
+  entry.cardEl = h('div', { class: 'card' },
+    h('div', { class: 'whead' }, titleEl, link(c.mint), badgeEl, h('div', { class: 'acts' }, chartBtn, unwatchBtn)),
+    statusBox,
+    metaEl,
     chartWrap,
-    alerts.length
-      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), a.kind, a.wallet ? link(a.wallet) : '', detail(a)]))
-      : h('p', { class: 'mut' }, 'No alerts for this coin yet.'));
+    alertsWrap);
+  updateWatchedCoinCard(entry, c);
+  return entry;
 }
 
 async function watch() {
   const d = await get('/api/watch');
   const coins = (d && d.coins) || [];
   syncWatched(coins);
-  const input = h('input', { placeholder: 'Coin mint address', 'aria-label': 'Coin mint address', value: watchInput });
-  const go = h('button', { class: 'go' }, 'Watch coin');
-  const msg = h('p', { class: 'mut' }, 'Watched coins are scanned first on every cycle and monitored for creator sells, tracked-wallet sells, and liquidity drops even if unlisted.');
-  go.onclick = async () => {
-    const m = input.value.trim();
-    if (!B58.test(m)) { msg.textContent = 'That is not a valid Solana mint address.'; return; }
-    watchInput = '';
-    const res = await fetch('/api/watch?mint=' + encodeURIComponent(m), { method: 'POST' });
-    const out = await res.json();
-    if (out && Array.isArray(out.coins)) syncWatched(out.coins);
-    await watch();
-  };
-  put('watch',
-    card('Watch coins',
+  const sec = document.getElementById('watch');
+  if (!watchFormCard) {
+    const input = h('input', { placeholder: 'Coin mint address', 'aria-label': 'Coin mint address', value: watchInput });
+    input.oninput = () => { watchInput = input.value; };
+    const go = h('button', { class: 'go' }, 'Watch coin');
+    const msg = h('p', { class: 'mut' }, 'Watched coins are scanned first on every cycle and monitored for creator sells, tracked-wallet sells, and liquidity drops even if unlisted.');
+    go.onclick = async () => {
+      const m = input.value.trim();
+      if (!B58.test(m)) { msg.textContent = 'That is not a valid Solana mint address.'; return; }
+      watchInput = '';
+      input.value = '';
+      msg.textContent = 'Watched coins are scanned first on every cycle and monitored for creator sells, tracked-wallet sells, and liquidity drops even if unlisted.';
+      const res = await fetch('/api/watch?mint=' + encodeURIComponent(m), { method: 'POST' });
+      const out = await res.json();
+      if (out && Array.isArray(out.coins)) syncWatched(out.coins);
+      await watch();
+    };
+    watchFormCard = card('Watch coins',
       h('p', { class: 'lead' }, 'Pin coins you are holding or watching to track their hold status, red flags, live DexScreener candle chart, and dedicated ping alerts.'),
-      input, ' ', go, msg),
-    ...(coins.length ? coins.map(renderWatchedCoin) : [card('Watched coins', h('p', { class: 'mut' }, 'No coins watched yet. Paste a mint address above or click Watch on any coin in Narratives or Ping.'))]));
+      input, ' ', go, msg);
+    watchListWrap = h('div', {});
+    watchEmptyCard = card('Watched coins', h('p', { class: 'mut' }, 'No coins watched yet. Paste a mint address above or click Watch on any coin in Narratives or Ping.'));
+  }
+  if (!sec.dataset.mounted) {
+    sec.setAttribute('data-mounted', '1');
+    sec.replaceChildren(watchFormCard, watchListWrap);
+  }
+
+  const nextMints = new Set(coins.map((c) => c.mint));
+  for (const [m, entry] of watchedCards) {
+    if (!nextMints.has(m)) {
+      if (entry.cardEl.remove) entry.cardEl.remove();
+      else if (watchListWrap.children) watchListWrap.children = watchListWrap.children.filter((x) => x !== entry.cardEl);
+      watchedCards.delete(m);
+    }
+  }
+  if (!coins.length) {
+    watchListWrap.replaceChildren(watchEmptyCard);
+    return;
+  }
+  if (watchEmptyCard.remove) watchEmptyCard.remove();
+  else if (watchListWrap.children) watchListWrap.children = watchListWrap.children.filter((x) => x !== watchEmptyCard);
+
+  for (const c of coins) {
+    let entry = watchedCards.get(c.mint);
+    if (entry) {
+      updateWatchedCoinCard(entry, c);
+    } else {
+      entry = createWatchedCoinCard(c);
+      watchedCards.set(c.mint, entry);
+      watchListWrap.append(entry.cardEl);
+    }
+  }
 }
 
 let pingKind = '';

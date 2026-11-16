@@ -318,10 +318,11 @@ test('Watch tab renders hold badges, plain-English reasons, ping table, and togg
   assert.equal(iframes.length, 1);
   assert.match(iframes[0].getAttribute('src'), new RegExp(`https://dexscreener\\.com/solana/${poolSafe}\\?embed=1`));
 
-  // Refresh preserves open chart state
+  // Refresh preserves the exact same iframe DOM element in-place (never detached or reloaded)
   await watch();
   const iframesAfterRefresh = root.findAll((e) => e.tagName === 'IFRAME');
   assert.equal(iframesAfterRefresh.length, 1);
+  assert.equal(iframesAfterRefresh[0], iframes[0]);
   const refreshedChartBtn = root.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Show chart' || e.text === 'Hide chart'))[0];
   assert.equal(refreshedChartBtn.text, 'Hide chart');
 
