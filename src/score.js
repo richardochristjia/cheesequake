@@ -195,8 +195,22 @@ function exitReason(k, d = {}) {
   return k;
 }
 
-export function watchList(db, now, config = defaultConfig) {
+export function enrichAlert(a, labelOf) {
+  const detail = typeof a.detail === 'string' ? JSON.parse(a.detail || '{}') : { ...(a.detail || {}) };
+  if (a.kind === 'consensus') {
+    const wallet_labels = {};
+    for (const w of Array.isArray(detail.wallets) ? detail.wallets : []) {
+      const l = labelOf.get(w);
+      if (l) wallet_labels[w] = l;
+    }
+    detail.wallet_labels = wallet_labels;
+  }
+  return { ...a, wallet_label: (a.wallet && labelOf.get(a.wallet)) || null, detail };
+}
+
+export function watchList(db, now, config = defaultConfig, wallets = []) {
   const nowS = Math.floor(now / 1000);
+  const labelOf = wallets instanceof Map ? wallets : new Map((wallets || []).filter((w) => w?.label).map((w) => [w.address, w.label]));
   const rows = db.prepare('SELECT mint, added_ts FROM watched_coins ORDER BY added_ts DESC').all();
   const getTok = db.prepare('SELECT symbol, name, creator FROM tokens WHERE mint = ?');
   const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
@@ -211,7 +225,7 @@ export function watchList(db, now, config = defaultConfig) {
     const cand = getCand.get(mint);
     const repRow = getRep.get(mint);
     const rep = repRow ? JSON.parse(repRow.json || 'null') : null;
-    const alerts = getAlerts.all(mint).map((a) => ({ ...a, detail: JSON.parse(a.detail || '{}') }));
+    const alerts = getAlerts.all(mint).map((a) => enrichAlert(a, labelOf));
     const exitByKind = new Map();
     for (const r of getExits.all(mint, nowS - 86400)) {
       if (!exitByKind.has(r.kind)) exitByKind.set(r.kind, JSON.parse(r.detail || '{}'));

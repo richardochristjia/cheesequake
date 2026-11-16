@@ -105,6 +105,20 @@ const short = (a) => (a ? a.slice(0, 4) + '…' + a.slice(-4) : '');
 const fmt = (n, d = 0) => (n === null || n === undefined ? 'unknown' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d }));
 const when = (ts) => new Date(ts * 1000).toLocaleString();
 const link = (a) => (B58.test(a || '') ? h('a', { href: 'https://solscan.io/account/' + a, target: '_blank', rel: 'noopener noreferrer' }, short(a)) : short(a));
+const walletCell = (address, label) => (!address ? '' : label ? [label + ' ', link(address)] : link(address));
+function consensusWallets(a) {
+  const d = a.detail || {};
+  const ws = Array.isArray(d.wallets) ? d.wallets : [];
+  const labels = d.wallet_labels || {};
+  const out = [];
+  ws.forEach((w, i) => {
+    if (i) out.push(', ');
+    if (labels[w]) out.push(labels[w] + ' ', link(w));
+    else out.push(link(w));
+  });
+  return out;
+}
+const alertWalletCell = (a) => (a.wallet ? walletCell(a.wallet, a.wallet_label) : a.kind === 'consensus' ? consensusWallets(a) : '');
 const card = (title, ...kids) => h('div', { class: 'card' }, h('h2', {}, title), ...kids);
 const table = (head, rows) => h('table', {}, h('thead', {}, h('tr', {}, head.map((x) => h('th', {}, x)))), h('tbody', {}, rows.map((r) => h('tr', {}, r.map((c) => h('td', {}, c))))));
 const get = async (p) => (await fetch(p)).json();
@@ -196,7 +210,7 @@ function updateWatchedCoinCard(entry, c) {
     h('span', {}, 'Liquidity: ' + liqTxt));
   entry.alertsWrap.replaceChildren(
     alerts.length
-      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), a.kind, a.wallet ? link(a.wallet) : '', detail(a)]))
+      ? table(['Time', 'Kind', 'Wallet', 'Detail'], alerts.map((a) => [when(a.ts), a.kind, alertWalletCell(a), detail(a)]))
       : h('p', { class: 'mut' }, 'No alerts for this coin yet.'));
 }
 
@@ -315,13 +329,22 @@ async function watch() {
 }
 
 let pingKind = '';
+let pingWallet = '';
 async function ping() {
-  const [d] = await Promise.all([get('/api/ping' + (pingKind ? '?kind=' + encodeURIComponent(pingKind) : '')), ensureWatched()]);
+  const params = [];
+  if (pingKind) params.push('kind=' + encodeURIComponent(pingKind));
+  if (pingWallet) params.push('wallet=' + encodeURIComponent(pingWallet));
+  const [d] = await Promise.all([get('/api/ping' + (params.length ? '?' + params.join('&') : '')), ensureWatched()]);
   const sel = h('select', { 'aria-label': 'Alert kind' }, ['', 'buy', 'sell', 'consensus', 'exit'].map((k) => h('option', { value: k }, k || 'all')));
   sel.value = pingKind;
-  sel.onchange = () => { pingKind = sel.value; ping(); };
-  put('ping', card('Wallet activity', sel, d.alerts.length ? table(['Time', 'Kind', 'Coin', 'Wallet', 'Detail', ''],
-    d.alerts.map((a) => [when(a.ts), a.kind, [a.symbol ? a.symbol + ' ' : '', link(a.mint)], a.wallet ? link(a.wallet) : '', detail(a), watchBtn(a.mint, ping)]))
+  sel.onchange = () => { pingKind = sel.value; return ping(); };
+  const wsel = h('select', { 'aria-label': 'Wallet' },
+    h('option', { value: '' }, 'all wallets'),
+    ...(d.wallets || []).map((w) => h('option', { value: w.address }, w.label ? w.label + ' (' + short(w.address) + ')' : short(w.address))));
+  wsel.value = pingWallet;
+  wsel.onchange = () => { pingWallet = wsel.value; return ping(); };
+  put('ping', card('Wallet activity', sel, ' ', wsel, d.alerts.length ? table(['Time', 'Kind', 'Coin', 'Wallet', 'Detail', ''],
+    d.alerts.map((a) => [when(a.ts), a.kind, [a.symbol ? a.symbol + ' ' : '', link(a.mint)], alertWalletCell(a), detail(a), watchBtn(a.mint, ping)]))
     : h('p', { class: 'mut' }, 'No alerts yet.')));
 }
 function detail(a) {

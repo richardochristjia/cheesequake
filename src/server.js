@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { B58 } from './wallets.js';
 import { recentHourly, trenchIndex } from './market.js';
-import { runningNow, watchList } from './score.js';
+import { runningNow, watchList, enrichAlert } from './score.js';
 import { scorecardFor } from './scorecard.js';
 import { calibration } from './outcomes.js';
 
@@ -15,13 +15,27 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
       const hourly = recentHourly(db, config.index.windowHours);
       return { index: trenchIndex(hourly), hours: hourly.length, warmupHours: config.index.warmupHours, hourly };
     },
-    '/api/watch': () => ({ coins: watchList(db, now(), config) }),
+    '/api/watch': () => ({ coins: watchList(db, now(), config, wallets()) }),
     '/api/ping': (q) => {
       const kind = q.get('kind');
-      const where = !kind ? '' : kind === 'exit' ? "WHERE kind LIKE 'exit\\_%' ESCAPE '\\'" : 'WHERE kind = ?';
-      const rows = db.prepare(`SELECT a.ts, a.kind, a.mint, a.wallet, a.detail, t.symbol, t.name FROM alerts a LEFT JOIN tokens t ON t.mint = a.mint ${where} ORDER BY a.ts DESC, a.id DESC LIMIT 200`)
-        .all(...(kind && kind !== 'exit' ? [kind] : []));
-      return { alerts: rows.map((r) => ({ ...r, detail: JSON.parse(r.detail || '{}') })) };
+      const wallet = q.get('wallet') ?? '';
+      if (wallet && !B58.test(wallet)) return [400, { error: 'invalid wallet address' }];
+      const clauses = [];
+      const params = [];
+      if (kind === 'exit') clauses.push("a.kind LIKE 'exit\\_%' ESCAPE '\\'");
+      else if (kind) { clauses.push('a.kind = ?'); params.push(kind); }
+      if (wallet) { clauses.push("(a.wallet = ? OR a.kind = 'consensus')"); params.push(wallet); }
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+      const limit = wallet ? '' : 'LIMIT 200';
+      const rows = db.prepare(`SELECT a.ts, a.kind, a.mint, a.wallet, a.detail, t.symbol, t.name FROM alerts a LEFT JOIN tokens t ON t.mint = a.mint ${where} ORDER BY a.ts DESC, a.id DESC ${limit}`)
+        .all(...params);
+      const wl = wallets();
+      const labelOf = new Map(wl.filter((w) => w?.label).map((w) => [w.address, w.label]));
+      const alerts = rows
+        .map((r) => enrichAlert(r, labelOf))
+        .filter((a) => !wallet || a.wallet === wallet || (a.kind === 'consensus' && Array.isArray(a.detail.wallets) && a.detail.wallets.includes(wallet)))
+        .slice(0, 200);
+      return { alerts, wallets: wl };
     },
     '/api/narratives': () => {
       const hour = Math.floor(now() / 1000 / 3600) * 3600;
@@ -58,7 +72,7 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
         } else {
           db.prepare('DELETE FROM watched_coins WHERE mint = ?').run(mint);
         }
-        return send(200, { ok: true, coins: watchList(db, now(), config) });
+        return send(200, { ok: true, coins: watchList(db, now(), config, wallets()) });
       }
       if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
       if (url.pathname === '/') return send(200, readFileSync(PAGE, 'utf8'), 'text/html');

@@ -90,7 +90,7 @@ test('a foreign Host header gets 403, a loopback one gets 200', async () => {
   } finally { server.close(); server.closeAllConnections(); }
 });
 
-function loadDashboard(narrativesPayload, watchCoins = []) {
+function loadDashboard(narrativesPayload, watchCoins = [], pingPayload = { alerts: [], wallets: [] }) {
   const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   class Node { constructor(t = '') { this._text = String(t); } get textContent() { return this._text; } set textContent(v) { this._text = String(v); } }
@@ -147,13 +147,16 @@ function loadDashboard(narrativesPayload, watchCoins = []) {
       }
       return { json: async () => ({ ok: true, coins }) };
     }
+    if (url.startsWith('/api/ping')) {
+      return { json: async () => (typeof pingPayload === 'function' ? pingPayload(url) : pingPayload) };
+    }
     return {
       json: async () => (url === '/api/narratives' ? narrativesPayload
         : { index: { value: null, zone: 'Neutral' }, hours: 0, warmupHours: 168, hourly: [] }),
     };
   };
   const sandbox = { Node, document, fetch, setInterval: () => {}, encodeURIComponent, Object, Set, Map, Array, Number, String, Math, Date, RegExp, URL };
-  const exports = vm.runInNewContext(`${script}\n;({ PARTS, BANDS, UNKNOWNS, explainPart, bandInfo, missingList, narratives, watch, openMints, openCharts, watchedSet, show })`, sandbox);
+  const exports = vm.runInNewContext(`${script}\n;({ PARTS, BANDS, UNKNOWNS, explainPart, bandInfo, missingList, narratives, watch, ping, walletCell, consensusWallets, openMints, openCharts, watchedSet, show })`, sandbox);
   return { ...exports, els, calls };
 }
 
@@ -372,4 +375,131 @@ test('Narratives hydrates watchedSet before visiting Watch so watched coins rend
   const refreshedBtn = root.findAll((e) => e.tagName === 'BUTTON' && (e.text === 'Watch' || e.text === 'Watching'))[0];
   assert.equal(refreshedBtn.text, 'Watch');
   assert.equal(refreshedBtn.getAttribute('aria-pressed'), 'false');
+});
+
+test('/api/ping and /api/watch enrich wallet labels, filter by wallet (direct + consensus), compose with kind, and reject invalid wallet addresses', async () => {
+  const db = openDb(':memory:');
+  const mint = addr('M');
+  const wAlice = addr('A');
+  const wBob = addr('B');
+  const wUnlabeled = addr('U');
+  const wStranger = addr('S');
+  db.prepare('INSERT INTO tokens(mint, symbol, name, creator) VALUES (?,?,?,?)').run(mint, 'PEPE', 'Pepe', addr('D'));
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(mint, NOW / 1000 - 100);
+  const insAlert = db.prepare('INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,?,?,?,?,?)');
+  insAlert.run(NOW / 1000 - 30, 'buy', mint, wAlice, '{"usd":500}', 'a-buy');
+  insAlert.run(NOW / 1000 - 20, 'exit_wallet', mint, wBob, '{"usd":300}', 'b-exit');
+  insAlert.run(NOW / 1000 - 10, 'consensus', mint, null, JSON.stringify({ wallets: [wAlice, wBob, wUnlabeled], mcap: 90000 }), 'ab-cons');
+  // Seed >200 newer consensus alerts for other wallets to verify SQL/JS filtering does not drop wAlice's history
+  const otherMint = addr('X');
+  for (let i = 0; i < 205; i++) {
+    insAlert.run(NOW / 1000 + i, 'consensus', otherMint, null, JSON.stringify({ wallets: [wStranger], mcap: 1000 }), `s-cons-${i}`);
+  }
+
+  const walletList = [
+    { address: wAlice, label: 'alice' },
+    { address: wBob, label: 'bob' },
+    { address: wUnlabeled, label: null },
+  ];
+  const server = await startServer({
+    db, config, tracer: { start: () => ({}), get: () => ({}) },
+    wallets: () => walletList, now: () => NOW,
+  }, 0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const badRes = await fetch(`${base}/api/ping?wallet=not-base58!`);
+    assert.equal(badRes.status, 400);
+    assert.deepEqual(await badRes.json(), { error: 'invalid wallet address' });
+
+    const byAlice = await (await fetch(`${base}/api/ping?wallet=${wAlice}`)).json();
+    assert.deepEqual(byAlice.wallets, walletList);
+    assert.equal(byAlice.alerts.length, 2);
+    assert.equal(byAlice.alerts[0].kind, 'consensus');
+    assert.equal(byAlice.alerts[0].wallet_label, null);
+    assert.deepEqual(byAlice.alerts[0].detail.wallet_labels, { [wAlice]: 'alice', [wBob]: 'bob' });
+    assert.equal(byAlice.alerts[1].kind, 'buy');
+    assert.equal(byAlice.alerts[1].wallet, wAlice);
+    assert.equal(byAlice.alerts[1].wallet_label, 'alice');
+
+    const byAliceBuy = await (await fetch(`${base}/api/ping?wallet=${wAlice}&kind=buy`)).json();
+    assert.equal(byAliceBuy.alerts.length, 1);
+    assert.equal(byAliceBuy.alerts[0].kind, 'buy');
+    assert.equal(byAliceBuy.alerts[0].wallet_label, 'alice');
+
+    const byBobExit = await (await fetch(`${base}/api/ping?wallet=${wBob}&kind=exit`)).json();
+    assert.equal(byBobExit.alerts.length, 1);
+    assert.equal(byBobExit.alerts[0].kind, 'exit_wallet');
+    assert.equal(byBobExit.alerts[0].wallet_label, 'bob');
+
+    const watchRes = await (await fetch(`${base}/api/watch`)).json();
+    assert.equal(watchRes.coins.length, 1);
+    const coinAlerts = watchRes.coins[0].alerts;
+    const buyAlert = coinAlerts.find((a) => a.kind === 'buy');
+    const consAlert = coinAlerts.find((a) => a.kind === 'consensus' && a.detail.wallets.includes(wAlice));
+    assert.equal(buyAlert.wallet_label, 'alice');
+    assert.deepEqual(consAlert.detail.wallet_labels, { [wAlice]: 'alice', [wBob]: 'bob' });
+  } finally { server.close(); server.closeAllConnections(); }
+});
+
+test('Ping and Watch tabs render registered wallet user names, consensus wallet names, and filter by wallet selection across refreshes', async () => {
+  const mint = addr('M');
+  const wAlice = addr('A');
+  const wBob = addr('B');
+  const wUnlabeled = addr('U');
+  const wallets = [
+    { address: wAlice, label: 'alice' },
+    { address: wBob, label: 'bob' },
+    { address: wUnlabeled, label: null },
+  ];
+  const allAlerts = [
+    { ts: 1700000000, kind: 'buy', mint, symbol: 'PEPE', wallet: wAlice, wallet_label: 'alice', detail: { usd: 450 } },
+    { ts: 1700000050, kind: 'consensus', mint, symbol: 'PEPE', wallet: null, wallet_label: null, detail: { wallets: [wAlice, wBob, wUnlabeled], wallet_labels: { [wAlice]: 'alice', [wBob]: 'bob' }, mcap: 120000 } },
+    { ts: 1700000100, kind: 'sell', mint, symbol: 'PEPE', wallet: wUnlabeled, wallet_label: null, detail: { usd: 100 } },
+  ];
+  const watched = [{
+    mint, symbol: 'PEPE', name: 'Pepe', pool: addr('P'),
+    status: 'safe', label: 'Safe to hold', score: 82, price_usd: 0.01, mcap_usd: 120000, liquidity_usd: 40000,
+    reasons: ['Passed all safety checks with no recent exit alerts'],
+    alerts: allAlerts,
+  }];
+  const pingHandler = (url) => {
+    const u = new URL(url, 'http://127.0.0.1');
+    const kind = u.searchParams.get('kind') || '';
+    const w = u.searchParams.get('wallet') || '';
+    const alerts = allAlerts.filter((a) => (!kind || a.kind === kind) && (!w || a.wallet === w || (a.kind === 'consensus' && a.detail.wallets.includes(w))));
+    return { alerts, wallets };
+  };
+  const { ping, watch, show, els, calls } = loadDashboard({ running: [], themes: [], wallets: [], calibration: { rows: [], missed: 0 } }, watched, pingHandler);
+
+  show('ping');
+  await ping();
+  const pingRoot = els.get('ping');
+  const selects = pingRoot.findAll((e) => e.tagName === 'SELECT');
+  assert.equal(selects.length, 2);
+  assert.equal(selects[0].getAttribute('aria-label'), 'Alert kind');
+  assert.equal(selects[1].getAttribute('aria-label'), 'Wallet');
+  const walletOptions = selects[1].findAll((e) => e.tagName === 'OPTION').map((o) => o.text);
+  assert.deepEqual(walletOptions, ['all wallets', 'alice (AAAA…1111)', 'bob (BBBB…1111)', 'UUUU…1111']);
+  assert.match(pingRoot.text, /alice AAAA…1111/);
+  assert.match(pingRoot.text, /alice AAAA…1111, bob BBBB…1111, UUUU…1111/);
+
+  // Filter by wallet and verify selection persists across refresh and composes with kind
+  selects[1].value = wAlice;
+  await selects[1].onchange();
+  assert.ok(calls.some((c) => c.url === `/api/ping?wallet=${wAlice}`));
+  const afterWalletSelects = pingRoot.findAll((e) => e.tagName === 'SELECT');
+  assert.equal(afterWalletSelects[1].value, wAlice);
+  assert.equal(pingRoot.findAll((e) => e.tagName === 'TBODY')[0].children.length, 2);
+
+  afterWalletSelects[0].value = 'buy';
+  await afterWalletSelects[0].onchange();
+  assert.ok(calls.some((c) => c.url === `/api/ping?kind=buy&wallet=${wAlice}`));
+  assert.equal(pingRoot.findAll((e) => e.tagName === 'TBODY')[0].children.length, 1);
+
+  // Watch tab alert table also displays registered wallet names and consensus wallet names
+  show('watch');
+  await watch();
+  const watchRoot = els.get('watch');
+  assert.match(watchRoot.text, /alice AAAA…1111/);
+  assert.match(watchRoot.text, /alice AAAA…1111, bob BBBB…1111, UUUU…1111/);
 });
