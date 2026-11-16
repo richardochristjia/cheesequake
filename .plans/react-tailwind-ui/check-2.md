@@ -1,0 +1,2 @@
+- Plan holds against `public/index.html:127-144,383-493`: `KIND_INFO`, `PARTS`, `BANDS`, `UNKNOWNS`, `LEVEL_CLS`, `explainPart`, `short`, `fmt`, `when`, `B58`, `detail`, and `consensusWallets` can be ported verbatim into `client/src/lib/glossary.ts` and `client/src/lib/format.ts`.
+- `plan.md:30` lists `Card`, `Badge`, `KindTooltip`, `EmptyState`, `AddressLink` as shared primitives while `tasks.md:9` only names `KindTooltip.tsx` and `EmptyState.tsx`; including `Card`, `Badge`, and `AddressLink` in `client/src/components/ui.tsx` satisfies both.

@@ -5,8 +5,8 @@
 - [x] Update `src/server.js` to serve `public/dist/index.html` on `GET /` and static assets under `public/dist/` with MIME types and path-traversal guards
 
 ## Phase 2: Burnt Basque Design System & App Shell
-- [ ] Configure Burnt Basque theme tokens, `tabular-nums`, and `prefers-reduced-motion` styles in `client/src/index.css`
-- [ ] Build `App.tsx`, `Layout.tsx` (custom SVG emblem, 5-tab accessible `tablist` with icons, 30s auto-refresh), and shared UI primitives (`KindTooltip.tsx`, `EmptyState.tsx`, `lib/format.ts`, `lib/glossary.ts`, `types.ts`)
+- [x] Configure Burnt Basque theme tokens, `tabular-nums`, and `prefers-reduced-motion` styles in `client/src/index.css`
+- [x] Build `App.tsx`, `Layout.tsx` (custom SVG emblem, 5-tab accessible `tablist` with icons, 30s auto-refresh), and shared UI primitives (`KindTooltip.tsx`, `EmptyState.tsx`, `lib/format.ts`, `lib/glossary.ts`, `types.ts`)
 
 ## Phase 3: Market, Watch & Ping Views
 - [ ] Implement `Market.tsx` and interactive `TrenchChart.tsx` SVG with 5 zone bands and hover crosshair tooltip

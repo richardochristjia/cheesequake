@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+@theme {
+  --color-basque-base: #110e0b;
+  --color-basque-card: #191511;
+  --color-basque-elevated: #211c16;
+  --color-basque-accent: #e59a28;
+  --color-basque-accent-dim: #b87718;
+  --color-basque-cream: #f4ede2;
+  --color-basque-cocoa: #9c8f80;
+  --color-basque-line: #2d251d;
+  --color-basque-good: #5cd093;
+  --color-basque-caution: #f59e0b;
+  --color-basque-bad: #fb7185;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #110e0b;
+  --card: #191511;
+  --elevated: #211c16;
+  --acc: #e59a28;
+  --fg: #f4ede2;
+  --mut: #9c8f80;
+  --line: #2d251d;
+  --good: #5cd093;
+  --mid: #f59e0b;
+  --bad: #fb7185;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
