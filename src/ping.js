@@ -125,7 +125,7 @@ export function checkExits({ db, tracked, now, config = defaultConfig }) {
   const snaps = db.prepare('SELECT ts, liquidity_usd, vol_h1, buyers_h1 FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC');
   for (const { mint, creator } of mints) {
     for (const t of trades.all(mint)) {
-      if (t.wallet === creator) fire('exit_deployer', mint, t.wallet, t.ts, { side: t.side });
+      if (t.wallet === creator) fire('exit_deployer', mint, t.wallet, t.ts, { side: t.side, usd: t.quote_usd });
       else if (t.side === 'sell' && trackedSet.has(t.wallet)) fire('exit_wallet', mint, t.wallet, t.ts, { usd: t.quote_usd });
     }
     const all = snaps.all(mint);

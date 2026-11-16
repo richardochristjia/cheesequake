@@ -165,25 +165,35 @@ export function runningNow(db, now) {
      ORDER BY c.score DESC`).all(since).map((r) => ({ ...r, reasons: JSON.parse(r.reasons), unknowns: JSON.parse(r.unknowns), vetoes: JSON.parse(r.vetoes) }));
 }
 
-const VETO_REASONS = {
-  mint_authority: 'Mint authority is still active (new tokens can be minted)',
-  freeze_authority: 'Freeze authority is still active (wallets can be frozen)',
-  rugged: 'Flagged as rugged or high danger by RugCheck',
-  transfer_fee: 'Token charges a transfer fee',
-  lp_unlocked: 'Liquidity pool is not sufficiently locked',
-  top10: 'Top 10 holders own too much of the supply',
-  insiders: 'Insider wallets hold too much of the supply',
-  liquidity: 'Pool liquidity is below the safety minimum',
-  age: 'Coin is newer than the minimum age threshold',
-  wash: 'Suspected wash trading (high volume with too few buyers)',
-};
+const usd = (n) => (n == null ? null : '$' + Math.round(Number(n)).toLocaleString('en-US'));
 
-const EXIT_REASONS = {
-  exit_deployer: 'Creator wallet sold or moved tokens in the last 24 hours',
-  exit_liquidity: 'Sharp liquidity drop detected in the last 24 hours',
-  exit_wallet: 'Tracked wallet sold this coin in the last 24 hours',
-  exit_divergence: 'Volume rose while unique buyers fell in the last 24 hours',
-};
+function vetoReason(v, snap, rep, config) {
+  if (v === 'mint_authority') return 'Mint authority is still active (new tokens can be minted)';
+  if (v === 'freeze_authority') return 'Freeze authority is still active (wallets can be frozen)';
+  if (v === 'rugged') {
+    const dangers = (rep?.risks || []).filter((r) => r.level === 'danger' && r.name).map((r) => r.name);
+    return 'Flagged as rugged or high danger by RugCheck' + (dangers.length ? ` (${dangers.join(', ')})` : '');
+  }
+  if (v === 'transfer_fee') return 'Token charges a transfer fee' + (rep?.transferFeePct > 0 ? ` (${rep.transferFeePct}%)` : '');
+  if (v === 'lp_unlocked') return 'Liquidity pool is not sufficiently locked' + (rep?.lpLockedPct != null ? ` (${Math.round(rep.lpLockedPct)}% locked, min ${config.veto.minLpLockedPct}%)` : '');
+  if (v === 'top10') {
+    const pct = top10Pct(rep);
+    return 'Top 10 holders own too much of the supply' + (pct != null ? ` (${Math.round(pct * 10) / 10}%, max ${config.veto.maxTop10Pct}%)` : '');
+  }
+  if (v === 'insiders') return 'Insider wallets hold too much of the supply';
+  if (v === 'liquidity') return 'Pool liquidity is below the safety minimum' + (snap?.liquidity_usd != null ? ` (${usd(snap.liquidity_usd)}, min ${usd(config.veto.minLiquidityUsd)})` : '');
+  if (v === 'age') return `Coin is newer than the minimum age threshold (${config.veto.minAgeMinutes} min)`;
+  if (v === 'wash') return 'Suspected wash trading (high volume with too few buyers)';
+  return `Safety check failed: ${v}`;
+}
+
+function exitReason(k, d = {}) {
+  if (k === 'exit_deployer') return 'Creator wallet sold or moved tokens in the last 24 hours' + (d.usd != null ? ` (${usd(d.usd)})` : d.side ? ` (${d.side})` : '');
+  if (k === 'exit_liquidity') return 'Sharp liquidity drop detected in the last 24 hours' + (d.from != null && d.to != null ? ` (${usd(d.from)} to ${usd(d.to)})` : '');
+  if (k === 'exit_wallet') return 'Tracked wallet sold this coin in the last 24 hours' + (d.usd != null ? ` (${usd(d.usd)})` : '');
+  if (k === 'exit_divergence') return 'Volume rose while unique buyers fell in the last 24 hours' + (d.vol != null && d.buyers != null ? ` (${usd(d.vol)} 1h vol, ${d.buyers} buyers)` : '');
+  return k;
+}
 
 export function watchList(db, now, config = defaultConfig) {
   const nowS = Math.floor(now / 1000);
@@ -191,19 +201,25 @@ export function watchList(db, now, config = defaultConfig) {
   const getTok = db.prepare('SELECT symbol, name, creator FROM tokens WHERE mint = ?');
   const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
   const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
+  const getRep = db.prepare('SELECT json FROM reports WHERE mint = ?');
   const getAlerts = db.prepare('SELECT ts, kind, mint, wallet, detail FROM alerts WHERE mint = ? ORDER BY ts DESC, id DESC LIMIT 50');
-  const getExits = db.prepare("SELECT DISTINCT kind FROM alerts WHERE mint = ? AND ts > ? AND kind LIKE 'exit_%'");
+  const getExits = db.prepare("SELECT kind, detail FROM alerts WHERE mint = ? AND ts > ? AND kind LIKE 'exit_%' ORDER BY ts DESC, id DESC");
 
   return rows.map(({ mint, added_ts }) => {
     const tok = getTok.get(mint);
     const snap = getSnap.get(mint);
     const cand = getCand.get(mint);
+    const repRow = getRep.get(mint);
+    const rep = repRow ? JSON.parse(repRow.json || 'null') : null;
     const alerts = getAlerts.all(mint).map((a) => ({ ...a, detail: JSON.parse(a.detail || '{}') }));
-    const exits = new Set(getExits.all(mint, nowS - 86400).map((r) => r.kind));
+    const exitByKind = new Map();
+    for (const r of getExits.all(mint, nowS - 86400)) {
+      if (!exitByKind.has(r.kind)) exitByKind.set(r.kind, JSON.parse(r.detail || '{}'));
+    }
     const vetoes = cand ? JSON.parse(cand.vetoes || '[]') : [];
     const unknowns = cand ? JSON.parse(cand.unknowns || '[]') : [];
     const scoreReasons = cand ? JSON.parse(cand.reasons || '[]') : [];
-    const hasAlert = (k) => exits.has(k);
+    const hasAlert = (k) => exitByKind.has(k);
 
     const flagVetoes = vetoes.filter((v) => v !== 'age');
     const isFlag = flagVetoes.length > 0 || hasAlert('exit_deployer') || hasAlert('exit_liquidity');
@@ -213,9 +229,9 @@ export function watchList(db, now, config = defaultConfig) {
 
     const reasons = [];
     if (!cand) reasons.push('Waiting for first safety scan');
-    for (const v of vetoes) reasons.push(VETO_REASONS[v] || `Safety check failed: ${v}`);
+    for (const v of vetoes) reasons.push(vetoReason(v, snap, rep, config));
     for (const k of ['exit_deployer', 'exit_liquidity', 'exit_wallet', 'exit_divergence']) {
-      if (hasAlert(k)) reasons.push(EXIT_REASONS[k]);
+      if (hasAlert(k)) reasons.push(exitReason(k, exitByKind.get(k)));
     }
     if (cand && !vetoes.length && cand.score < 45) reasons.push(`Score is low (${cand.score}/100)`);
     if (cand && unknowns.length > 0) reasons.push(`Missing safety or market data: ${unknowns.join(', ')}`);
