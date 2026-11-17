@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Transition, Variants } from 'motion/react';
 
 /**
@@ -133,3 +134,31 @@ export const expandCollapseVariants: Variants = {
 
 export const BUTTON_TAP = { scale: 0.97 } as const;
 export const CARD_HOVER = { y: -1 } as const;
+
+export function useRefreshHighlight(): {
+  highlightClass: string;
+  triggerHighlight: () => void;
+} {
+  const [highlighted, setHighlighted] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const triggerHighlight = useCallback(() => {
+    setHighlighted(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setHighlighted(false);
+    }, 650);
+  }, []);
+
+  const highlightClass = highlighted
+    ? 'ring-1 ring-[#e59a28]/60 shadow-[0_0_20px_rgba(229,154,40,0.14)] transition-[box-shadow,ring-color] duration-300'
+    : 'transition-[box-shadow,ring-color] duration-500';
+
+  return { highlightClass, triggerHighlight };
+}

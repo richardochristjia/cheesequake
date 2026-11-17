@@ -6,19 +6,20 @@ import {
   FAST_EASE_OUT,
   staggerContainerVariants,
   staggerItemVariants,
+  useRefreshHighlight,
 } from '../lib/motion';
 import type { MarketResponse } from '../types';
 
 export function Market({ refreshTick }: { refreshTick: number }) {
   const [data, setData] = useState<MarketResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [highlighted, setHighlighted] = useState(false);
-  const initialTickRef = useRef(refreshTick);
+  const { highlightClass, triggerHighlight } = useRefreshHighlight();
+  const prevTickRef = useRef(refreshTick);
 
   useEffect(() => {
     let active = true;
-    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
-    const isRefresh = refreshTick !== initialTickRef.current;
+    const isTickRefresh = prevTickRef.current !== refreshTick;
+    prevTickRef.current = refreshTick;
 
     fetch('/api/market')
       .then((r) => r.json() as Promise<MarketResponse>)
@@ -26,21 +27,15 @@ export function Market({ refreshTick }: { refreshTick: number }) {
         if (!active) return;
         setData(d);
         setError(null);
-        if (isRefresh) {
-          setHighlighted(true);
-          highlightTimer = setTimeout(() => {
-            if (active) setHighlighted(false);
-          }, 650);
-        }
+        if (isTickRefresh) triggerHighlight();
       })
       .catch((e: Error) => {
         if (active) setError(e.message);
       });
     return () => {
       active = false;
-      if (highlightTimer) clearTimeout(highlightTimer);
     };
-  }, [refreshTick]);
+  }, [refreshTick, triggerHighlight]);
 
   if (error) {
     return (
@@ -69,10 +64,6 @@ export function Market({ refreshTick }: { refreshTick: number }) {
           : val >= 20
             ? 'good'
             : 'mut';
-
-  const highlightClass = highlighted
-    ? 'ring-1 ring-[#e59a28]/60 shadow-[0_0_20px_rgba(229,154,40,0.14)] transition-[box-shadow,ring-color] duration-300'
-    : 'transition-[box-shadow,ring-color] duration-500';
 
   return (
     <motion.div

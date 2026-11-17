@@ -10,7 +10,11 @@ import {
 import { EmptyState } from '../components/EmptyState';
 import { KindTooltip } from '../components/KindTooltip';
 import { formatAlertDetail, short, when } from '../lib/format';
-import { boundedStaggerDelay, FAST_EASE_OUT } from '../lib/motion';
+import {
+  boundedStaggerDelay,
+  FAST_EASE_OUT,
+  useRefreshHighlight,
+} from '../lib/motion';
 import { isString, usePersistedState } from '../lib/tabState';
 import type { PingResponse } from '../types';
 
@@ -49,12 +53,11 @@ export function Ping({
   const [data, setData] = useState<PingResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadedFilterKey, setLoadedFilterKey] = useState<string>('');
-  const [highlighted, setHighlighted] = useState(false);
+  const { highlightClass, triggerHighlight } = useRefreshHighlight();
   const prevTickRef = useRef(refreshTick);
 
   useEffect(() => {
     let active = true;
-    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
     const isTickRefresh = prevTickRef.current !== refreshTick;
     prevTickRef.current = refreshTick;
     const nextFilterKey = `${kind}::${wallet}`;
@@ -70,25 +73,15 @@ export function Ping({
         setData(d);
         setLoadedFilterKey(nextFilterKey);
         setError(null);
-        if (isTickRefresh) {
-          setHighlighted(true);
-          highlightTimer = setTimeout(() => {
-            if (active) setHighlighted(false);
-          }, 650);
-        }
+        if (isTickRefresh) triggerHighlight();
       })
       .catch((e: Error) => {
         if (active) setError(e.message);
       });
     return () => {
       active = false;
-      if (highlightTimer) clearTimeout(highlightTimer);
     };
-  }, [kind, wallet, refreshTick]);
-
-  const highlightClass = highlighted
-    ? 'ring-1 ring-[#e59a28]/60 shadow-[0_0_20px_rgba(229,154,40,0.14)] transition-[box-shadow,ring-color] duration-300'
-    : 'transition-[box-shadow,ring-color] duration-500';
+  }, [kind, wallet, refreshTick, triggerHighlight]);
 
   return (
     <Card title="Wallet activity" className={highlightClass}>
