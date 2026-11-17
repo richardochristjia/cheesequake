@@ -58,6 +58,54 @@ function mockFetch(handlers: {
   });
 }
 
+class MockEventSource {
+  static instances: MockEventSource[] = [];
+  url: string;
+  onopen: ((ev: Event) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  private listeners = new Map<string, Set<EventListener>>();
+  closed = false;
+
+  constructor(url: string) {
+    this.url = url;
+    MockEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: EventListener) {
+    let set = this.listeners.get(type);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(type, set);
+    }
+    set.add(listener);
+  }
+
+  removeEventListener(type: string, listener: EventListener) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  close() {
+    this.closed = true;
+  }
+
+  emitOpen() {
+    this.onopen?.(new Event('open'));
+  }
+
+  emitError() {
+    this.onerror?.(new Event('error'));
+  }
+
+  emitUpdate(scopes: string[]) {
+    const event = new MessageEvent('update', {
+      data: JSON.stringify({ scopes }),
+    });
+    for (const listener of this.listeners.get('update') ?? []) {
+      listener(event);
+    }
+  }
+}
+
 describe('Cheesequake UI', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -67,6 +115,7 @@ describe('Cheesequake UI', () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('KIND_INFO defines plain-English explanations for all 7 alert kinds', () => {
@@ -1310,5 +1359,143 @@ describe('Cheesequake UI', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Show all 6 themes' })).toBeInTheDocument();
     });
+  });
+
+  it('Layout renders Live, Reconnecting, and omitted liveStatus indicators', () => {
+    const { rerender } = render(
+      <Layout
+        activeTab="market"
+        onTabChange={() => {}}
+        lastUpdated={null}
+        refreshing={false}
+        onRefresh={() => {}}
+        liveStatus="live"
+      >
+        <div>Body</div>
+      </Layout>,
+    );
+
+    expect(screen.getByLabelText('Live updates connected')).toBeInTheDocument();
+    expect(screen.getByText('Live')).toBeInTheDocument();
+
+    rerender(
+      <Layout
+        activeTab="market"
+        onTabChange={() => {}}
+        lastUpdated={null}
+        refreshing={false}
+        onRefresh={() => {}}
+        liveStatus="reconnecting"
+      >
+        <div>Body</div>
+      </Layout>,
+    );
+
+    expect(screen.getByLabelText('Reconnecting live updates')).toBeInTheDocument();
+    expect(screen.getByText('Reconnecting')).toBeInTheDocument();
+
+    rerender(
+      <Layout
+        activeTab="market"
+        onTabChange={() => {}}
+        lastUpdated={null}
+        refreshing={false}
+        onRefresh={() => {}}
+      >
+        <div>Body</div>
+      </Layout>,
+    );
+
+    expect(screen.queryByText('Live')).toBeNull();
+    expect(screen.queryByText('Reconnecting')).toBeNull();
+  });
+
+  it('App subscribes to /api/events and performs scoped refresh without re-fetching unrelated domains', async () => {
+    MockEventSource.instances = [];
+    vi.stubGlobal('EventSource', MockEventSource);
+    const calls: string[] = [];
+    globalThis.fetch = mockFetch({
+      onCall: (url) => {
+        calls.push(url);
+      },
+    });
+
+    const { unmount } = render(<App />);
+
+    await waitFor(() => {
+      expect(calls.some((u) => u.startsWith('/api/market'))).toBe(true);
+      expect(calls.some((u) => u.startsWith('/api/ping'))).toBe(true);
+    });
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    const es = MockEventSource.instances[0];
+    expect(es.url).toBe('/api/events');
+
+    act(() => {
+      es.emitOpen();
+    });
+    expect(screen.getByLabelText('Live updates connected')).toBeInTheDocument();
+    expect(screen.getByText('Live')).toBeInTheDocument();
+
+    calls.length = 0;
+    act(() => {
+      es.emitUpdate(['ping']);
+    });
+
+    await waitFor(() => {
+      expect(calls.filter((u) => u.startsWith('/api/ping'))).toHaveLength(1);
+    });
+    expect(calls.filter((u) => u.startsWith('/api/market'))).toHaveLength(0);
+    expect(calls.filter((u) => u.startsWith('/api/narratives'))).toHaveLength(0);
+    expect(screen.getByText(/Updated /)).toBeInTheDocument();
+
+    unmount();
+    expect(es.closed).toBe(true);
+  });
+
+  it('App skips 60s fallback polling while live and polls all domains after EventSource error', async () => {
+    MockEventSource.instances = [];
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('EventSource', MockEventSource);
+      const calls: string[] = [];
+      globalThis.fetch = mockFetch({
+        onCall: (url) => {
+          calls.push(url);
+        },
+      });
+
+      render(<App />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const es = MockEventSource.instances[0];
+      act(() => {
+        es.emitOpen();
+      });
+      expect(screen.getByText('Live')).toBeInTheDocument();
+
+      calls.length = 0;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60000);
+      });
+      expect(calls).toHaveLength(0);
+
+      act(() => {
+        es.emitError();
+      });
+      expect(screen.getByLabelText('Reconnecting live updates')).toBeInTheDocument();
+      expect(screen.getByText('Reconnecting')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60000);
+      });
+      expect(calls.some((u) => u.startsWith('/api/market'))).toBe(true);
+      expect(calls.some((u) => u.startsWith('/api/ping'))).toBe(true);
+      expect(calls.some((u) => u.startsWith('/api/narratives'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

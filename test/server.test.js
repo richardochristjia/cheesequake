@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -220,4 +222,133 @@ test('/api/ping and /api/watch enrich wallet labels, filter by wallet (direct + 
     assert.equal(buyAlert.wallet_label, 'alice');
     assert.deepEqual(consAlert.detail.wallet_labels, { [wAlice]: 'alice', [wBob]: 'bob' });
   } finally { server.close(); server.closeAllConnections(); }
+});
+
+function connectSse(url) {
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const waiters = [];
+    const flush = () => {
+      for (let i = waiters.length - 1; i >= 0; i--) {
+        const w = waiters[i];
+        if (w.predicate(buffer)) {
+          waiters.splice(i, 1);
+          clearTimeout(w.timer);
+          w.resolve(buffer);
+        }
+      }
+    };
+    const req = http.get(url, (res) => {
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        buffer += chunk;
+        flush();
+      });
+      res.on('error', (err) => {
+        if (err.code !== 'ECONNRESET') reject(err);
+      });
+      const waitFor = (substring, timeoutMs = 2000) => {
+        if (buffer.includes(substring)) return Promise.resolve(buffer);
+        return new Promise((resWait, rejWait) => {
+          const timer = setTimeout(() => {
+            const idx = waiters.indexOf(entry);
+            if (idx !== -1) waiters.splice(idx, 1);
+            rejWait(new Error(`Timed out waiting for ${JSON.stringify(substring)} in SSE buffer:\n${buffer}`));
+          }, timeoutMs);
+          const entry = { predicate: (b) => b.includes(substring), resolve: resWait, timer };
+          waiters.push(entry);
+        });
+      };
+      const close = () => {
+        for (const w of waiters.splice(0)) clearTimeout(w.timer);
+        req.destroy();
+      };
+      resolve({ res, waitFor, close, getBuffer: () => buffer });
+    });
+    req.on('error', (err) => {
+      if (err.code !== 'ECONNRESET') reject(err);
+    });
+  });
+}
+
+test('GET /api/events streams SSE headers, initial comment, scoped updates, and cleans up on disconnect and server close', async (t) => {
+  const db = openDb(':memory:');
+  const events = new EventEmitter();
+  const server = await startServer({
+    db, config, tracer: { start: () => ({}), get: () => ({}) }, events, now: () => NOW,
+  }, 0);
+  const sockets = [];
+  t.after(async () => {
+    for (const s of sockets) s.close();
+    server.closeAllConnections?.();
+    await new Promise((r) => server.close(r));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  assert.equal(events.listenerCount('update'), 1);
+
+  const client1 = await connectSse(`${base}/api/events`);
+  sockets.push(client1);
+  assert.equal(client1.res.statusCode, 200);
+  assert.equal(client1.res.headers['content-type'], 'text/event-stream; charset=utf-8');
+  assert.equal(client1.res.headers['cache-control'], 'no-cache, no-transform');
+  assert.equal(client1.res.headers['x-content-type-options'], 'nosniff');
+  await client1.waitFor(': connected\n\n');
+
+  const client2 = await connectSse(`${base}/api/events`);
+  sockets.push(client2);
+  await client2.waitFor(': connected\n\n');
+
+  // Broadcast ignores invalid scopes, deduplicates valid ones, and reaches both clients
+  events.emit('update', ['bogus']);
+  events.emit('update', ['market', 'bogus', 'market', 'ping']);
+  await client1.waitFor('event: update\ndata: {"scopes":["market","ping"]}\n\n');
+  await client2.waitFor('event: update\ndata: {"scopes":["market","ping"]}\n\n');
+  assert.ok(!client1.getBuffer().includes('bogus'));
+
+  // Disconnect client1 and verify client2 still receives subsequent broadcasts cleanly
+  client1.close();
+  await new Promise((r) => setTimeout(r, 20));
+  events.emit('update', ['narratives']);
+  await client2.waitFor('event: update\ndata: {"scopes":["narratives"]}\n\n');
+
+  client2.close();
+  server.closeAllConnections?.();
+  await new Promise((r) => server.close(r));
+  assert.equal(events.listenerCount('update'), 0);
+});
+
+test('POST and DELETE /api/watch broadcast watch scope to connected SSE clients', async (t) => {
+  const db = openDb(':memory:');
+  const mint = addr('M');
+  db.prepare('INSERT INTO tokens(mint, symbol, name, creator) VALUES (?,?,?,?)').run(mint, 'WIF', 'dogwifhat', addr('D'));
+  const server = await startServer({
+    db, config, tracer: { start: () => ({}), get: () => ({}) }, now: () => NOW,
+  }, 0);
+  const sockets = [];
+  t.after(async () => {
+    for (const s of sockets) s.close();
+    server.closeAllConnections?.();
+    await new Promise((r) => server.close(r));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const sse = await connectSse(`${base}/api/events`);
+  sockets.push(sse);
+  await sse.waitFor(': connected\n\n');
+
+  const postRes = await fetch(`${base}/api/watch?mint=${mint}`, { method: 'POST' });
+  assert.equal(postRes.status, 200);
+  await sse.waitFor('event: update\ndata: {"scopes":["watch"]}\n\n');
+
+  const firstLen = sse.getBuffer().length;
+  const delRes = await fetch(`${base}/api/watch?mint=${mint}`, { method: 'DELETE' });
+  assert.equal(delRes.status, 200);
+  await sse.waitFor('event: update\ndata: {"scopes":["watch"]}\n\n');
+  // Confirm a second watch event arrived after the DELETE
+  const deadline = Date.now() + 2000;
+  while (sse.getBuffer().slice(firstLen).indexOf('event: update\ndata: {"scopes":["watch"]}\n\n') === -1) {
+    if (Date.now() > deadline) assert.fail('Expected second watch SSE event after DELETE /api/watch');
+    await new Promise((r) => setTimeout(r, 10));
+  }
 });
