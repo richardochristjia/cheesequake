@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, cleanup, act } from '@testing-library/react';
 import App from '../App';
+import { Layout } from '../components/Layout';
 import { KindTooltip } from '../components/KindTooltip';
 import { KIND_INFO, PARTS, BANDS, UNKNOWNS, explainPart } from '../lib/glossary';
 import type { WatchCoin } from '../types';
@@ -893,5 +894,29 @@ describe('Cheesequake UI', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('Layout renders the Telemetry Badge Logo beside the Cheesequake heading and disclaimer', () => {
+    render(
+      <Layout
+        activeTab="market"
+        onTabChange={() => {}}
+        lastUpdated={null}
+        refreshing={false}
+        onRefresh={() => {}}
+      >
+        <div>content</div>
+      </Layout>,
+    );
+
+    const logo = screen.getByTestId('cheesequake-logo');
+    expect(logo.tagName.toLowerCase()).toBe('svg');
+    expect(logo).toHaveAttribute('width', '36');
+    expect(logo).toHaveAttribute('height', '36');
+    expect(logo).toHaveAttribute('aria-hidden', 'true');
+    expect(logo).toHaveAttribute('viewBox', '0 0 64 64');
+
+    expect(screen.getByRole('heading', { name: 'Cheesequake' })).toBeInTheDocument();
+    expect(screen.getByText(/Research tool\. Not trading advice\./)).toBeInTheDocument();
   });
 });

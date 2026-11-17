@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { TabId } from '../types';
+import { Logo } from './Logo';
 
 const TABS: { id: TabId; label: string; icon: typeof Activity }[] = [
   { id: 'market', label: 'Market', icon: Activity },
@@ -125,39 +126,7 @@ export function Layout({
       <header className="sticky top-0 z-20 glass-header">
         <div className="mx-auto max-w-6xl px-4 py-2.5 sm:py-4 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <svg
-              width="36"
-              height="36"
-              viewBox="0 0 36 36"
-              fill="none"
-              aria-hidden="true"
-              className="shrink-0"
-            >
-              <rect
-                width="36"
-                height="36"
-                rx="9"
-                fill="#211c16"
-                stroke="#2d251d"
-                strokeWidth="1.5"
-              />
-              <path
-                d="M7 24 L18 10 L29 24 Z"
-                fill="#e59a28"
-                fillOpacity="0.2"
-                stroke="#e59a28"
-                strokeWidth="1.75"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M11 24 C14 20, 22 20, 25 24"
-                stroke="#f4ede2"
-                strokeOpacity="0.7"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-              <circle cx="18" cy="17" r="1.5" fill="#e59a28" />
-            </svg>
+            <Logo />
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-[#f4ede2]">
                 Cheesequake
