@@ -19,6 +19,7 @@ import {
   FAST_EASE_OUT,
   staggerContainerVariants,
   staggerItemVariants,
+  useRefreshHighlight,
 } from '../lib/motion';
 import {
   isBoolean,
@@ -42,7 +43,7 @@ export function Narratives({
 }) {
   const [data, setData] = useState<NarrativesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [highlighted, setHighlighted] = useState(false);
+  const { highlightClass, triggerHighlight } = useRefreshHighlight();
   const prevTickRef = useRef(refreshTick);
   const [openMints, setOpenMints] = usePersistedState<Set<string>>(
     NARRATIVES_OPEN_MINTS_KEY,
@@ -57,7 +58,6 @@ export function Narratives({
 
   useEffect(() => {
     let active = true;
-    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
     const isTickRefresh = prevTickRef.current !== refreshTick;
     prevTickRef.current = refreshTick;
 
@@ -67,21 +67,15 @@ export function Narratives({
         if (!active) return;
         setData(d);
         setError(null);
-        if (isTickRefresh) {
-          setHighlighted(true);
-          highlightTimer = setTimeout(() => {
-            if (active) setHighlighted(false);
-          }, 650);
-        }
+        if (isTickRefresh) triggerHighlight();
       })
       .catch((e: Error) => {
         if (active) setError(e.message);
       });
     return () => {
       active = false;
-      if (highlightTimer) clearTimeout(highlightTimer);
     };
-  }, [refreshTick]);
+  }, [refreshTick, triggerHighlight]);
 
   const toggleMint = (mint: string) => {
     setOpenMints((prev) => {
@@ -154,10 +148,6 @@ export function Narratives({
       </div>
     );
   };
-
-  const highlightClass = highlighted
-    ? 'ring-1 ring-[#e59a28]/60 shadow-[0_0_20px_rgba(229,154,40,0.14)] transition-[box-shadow,ring-color] duration-300'
-    : 'transition-[box-shadow,ring-color] duration-500';
 
   return (
     <motion.div
