@@ -1,7 +1,10 @@
-import { useState } from 'react';
 import { AddressLink, Badge } from './ui';
 import { fmt, short } from '../lib/format';
+import { isNullableString, usePersistedState } from '../lib/tabState';
 import type { TracerEdge, TracerNode } from '../types';
+
+const TRACER_SELECTED_ADDRESS_KEY =
+  'cheesequake:tab-state:tracer:selected-address';
 
 const TYPE_COLOR: Record<string, string> = {
   exchange: '#5cd093',
@@ -16,7 +19,11 @@ export function TracerGraph({
   nodes: TracerNode[];
   edges: TracerEdge[];
 }) {
-  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [selectedAddress, setSelectedAddress] = usePersistedState<string | null>(
+    TRACER_SELECTED_ADDRESS_KEY,
+    null,
+    { validate: isNullableString },
+  );
 
   if (!nodes.length) return null;
 

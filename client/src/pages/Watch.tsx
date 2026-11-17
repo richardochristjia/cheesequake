@@ -24,7 +24,11 @@ import {
   short,
   when,
 } from '../lib/format';
+import { isBoolean, isString, usePersistedState } from '../lib/tabState';
 import type { WatchCoin, WatchResponse } from '../types';
+
+const WATCH_MINT_INPUT_KEY = 'cheesequake:tab-state:watch:mint-input';
+const WATCH_CHART_KEY_PREFIX = 'cheesequake:tab-state:watch:chart:';
 
 const DEFAULT_NOTE =
   'Watched coins are scanned first on every cycle and monitored for creator sells, tracked-wallet sells, and liquidity drops even if unlisted.';
@@ -36,7 +40,11 @@ function WatchCard({
   coin: WatchCoin;
   onUnwatch: (mint: string) => void;
 }) {
-  const [chartOpen, setChartOpen] = useState(false);
+  const [chartOpen, setChartOpen] = usePersistedState<boolean>(
+    `${WATCH_CHART_KEY_PREFIX}${coin.mint}`,
+    false,
+    { validate: isBoolean },
+  );
 
   const tone = STATUS_TONE[coin.status] || 'mid';
   const label = coin.label || STATUS_LABEL[coin.status] || 'Caution';
@@ -209,7 +217,11 @@ export function Watch({
   onSyncWatched: (coins: WatchCoin[]) => void;
 }) {
   const [coins, setCoins] = useState<WatchCoin[] | null>(null);
-  const [mintInput, setMintInput] = useState('');
+  const [mintInput, setMintInput] = usePersistedState<string>(
+    WATCH_MINT_INPUT_KEY,
+    '',
+    { validate: isString },
+  );
   const [note, setNote] = useState(DEFAULT_NOTE);
   const [error, setError] = useState<string | null>(null);
 

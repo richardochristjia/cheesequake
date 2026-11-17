@@ -2,14 +2,24 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Card } from '../components/ui';
 import { TracerGraph } from '../components/TracerGraph';
 import { B58 } from '../lib/format';
+import { isString, usePersistedState } from '../lib/tabState';
 import type { TracerResponse } from '../types';
+
+const TRACER_INPUT_KEY = 'cheesequake:tab-state:tracer:input';
+const TRACER_WALLET_KEY = 'cheesequake:tab-state:tracer:wallet';
 
 const DEFAULT_NOTE =
   'Follows where the money went, hop by hop. Labelled destinations stop the trace; labels come from data/labels.json.';
 
 export function Tracer({ refreshTick }: { refreshTick: number }) {
-  const [input, setInput] = useState('');
-  const [traceWallet, setTraceWallet] = useState('');
+  const [input, setInput] = usePersistedState<string>(TRACER_INPUT_KEY, '', {
+    validate: isString,
+  });
+  const [traceWallet, setTraceWallet] = usePersistedState<string>(
+    TRACER_WALLET_KEY,
+    '',
+    { validate: isString },
+  );
   const [note, setNote] = useState(DEFAULT_NOTE);
   const [data, setData] = useState<TracerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
