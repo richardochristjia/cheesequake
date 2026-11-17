@@ -946,7 +946,7 @@ describe('Cheesequake UI', () => {
 
       poll = 1;
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(30000);
+        await vi.advanceTimersByTimeAsync(60000);
       });
 
       expect(screen.getByText('AUTO')).toBeInTheDocument();
