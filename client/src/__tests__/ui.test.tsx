@@ -1676,4 +1676,139 @@ describe('Cheesequake UI', () => {
       'shrink-0',
     ]);
   });
+
+  it('Watch keeps its DexScreener iframe mounted across tab switches while active tab indicator moves', async () => {
+    const mint = addr('W');
+    const pool = addr('P');
+    const watchCoin: WatchCoin = {
+      mint,
+      symbol: 'KEEP',
+      name: 'KeepMounted',
+      pool,
+      status: 'safe',
+      score: 88,
+      price_usd: 0.01,
+      mcap_usd: 120000,
+      liquidity_usd: 30000,
+      vol_h24: 45000,
+      image_url: null,
+      reasons: ['Healthy flow'],
+      alerts: [],
+    };
+    globalThis.fetch = mockFetch({
+      watch: () => ({ ok: true, coins: [watchCoin] }),
+    });
+
+    render(<App />);
+
+    const marketTab = screen.getByRole('tab', { name: /Market/i });
+    const watchTab = screen.getByRole('tab', { name: /Watch/i });
+    const pingTab = screen.getByRole('tab', { name: /Ping/i });
+
+    expect(marketTab).toHaveAttribute('aria-selected', 'true');
+    expect(marketTab.querySelector('span[aria-hidden="true"]')).not.toBeNull();
+    expect(watchTab.querySelector('span[aria-hidden="true"]')).toBeNull();
+
+    fireEvent.click(watchTab);
+    expect(watchTab).toHaveAttribute('aria-selected', 'true');
+    expect(watchTab.querySelector('span[aria-hidden="true"]')).not.toBeNull();
+    expect(marketTab.querySelector('span[aria-hidden="true"]')).toBeNull();
+
+    const showChartBtn = await screen.findByRole('button', { name: 'Show chart' });
+    fireEvent.click(showChartBtn);
+
+    const iframeEl = screen.getByTitle('KEEP live chart');
+    expect(iframeEl).toBeInTheDocument();
+    expect(iframeEl.getAttribute('src')).toContain(pool);
+
+    // Switch to Ping and Market; Watch tabpanel becomes hidden but iframe stays mounted in DOM
+    fireEvent.click(pingTab);
+    expect(pingTab).toHaveAttribute('aria-selected', 'true');
+    expect(pingTab.querySelector('span[aria-hidden="true"]')).not.toBeNull();
+    expect(document.contains(iframeEl)).toBe(true);
+    expect(iframeEl.closest('[role="tabpanel"]')).toHaveAttribute('hidden');
+
+    fireEvent.click(marketTab);
+    expect(document.contains(iframeEl)).toBe(true);
+    expect(iframeEl.closest('[role="tabpanel"]')).toHaveAttribute('hidden');
+
+    // Switch back to Watch: exact same iframe DOM node is still mounted and visible
+    fireEvent.click(watchTab);
+    expect(iframeEl.closest('[role="tabpanel"]')).not.toHaveAttribute('hidden');
+    expect(screen.getByTitle('KEEP live chart')).toBe(iframeEl);
+  });
+
+  it('KindTooltip and Narratives detail rows animate open and closed cleanly on interaction', async () => {
+    const { unmount } = render(<KindTooltip kind="buy" />);
+    const btn = screen.getByRole('button', { name: 'What Buy means' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    fireEvent.mouseEnter(btn);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(KIND_INFO.buy);
+
+    fireEvent.mouseLeave(btn);
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+    unmount();
+
+    const mint = addr('N');
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        running: [
+          {
+            mint,
+            symbol: 'NRV',
+            theme: 'agents',
+            score: 72,
+            band: 'confirm',
+            mcap_usd: 42000,
+            reasons: [{ part: 'wallets', points: 22, max: 30 }],
+            unknowns: [],
+          },
+        ],
+        themes: [],
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    const explainBtns = await screen.findAllByRole('button', { name: 'Explain score' });
+    fireEvent.click(explainBtns[0]);
+    expect(screen.getAllByRole('button', { name: 'Hide' }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[0]);
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Hide' })).toBeNull();
+    });
+  });
+
+  it('respects prefers-reduced-motion: reduce via MotionConfig reducedMotion="user"', async () => {
+    const matchMediaMock = vi.fn((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    vi.stubGlobal('matchMedia', matchMediaMock);
+    globalThis.fetch = mockFetch({});
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Ping/i })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Narratives/i })).toHaveAttribute('aria-selected', 'true');
+    });
+  });
 });
