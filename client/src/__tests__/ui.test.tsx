@@ -366,7 +366,9 @@ describe('Cheesequake UI', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide chart' }));
-    expect(document.querySelectorAll('iframe').length).toBe(0);
+    await waitFor(() => {
+      expect(document.querySelector('iframe')).toBeNull();
+    });
 
     // Invalid mint validation
     const input = screen.getByLabelText('Coin mint address');

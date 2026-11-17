@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   AddressLink,
   Badge,
@@ -11,6 +12,14 @@ import {
 } from '../components/ui';
 import { fmt } from '../lib/format';
 import { PARTS, bandInfo, explainPart, missingList } from '../lib/glossary';
+import {
+  boundedStaggerDelay,
+  BUTTON_TAP,
+  expandCollapseVariants,
+  FAST_EASE_OUT,
+  staggerContainerVariants,
+  staggerItemVariants,
+} from '../lib/motion';
 import {
   isBoolean,
   stringSetPersistence,
@@ -33,6 +42,8 @@ export function Narratives({
 }) {
   const [data, setData] = useState<NarrativesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState(false);
+  const prevTickRef = useRef(refreshTick);
   const [openMints, setOpenMints] = usePersistedState<Set<string>>(
     NARRATIVES_OPEN_MINTS_KEY,
     () => new Set(),
@@ -46,12 +57,21 @@ export function Narratives({
 
   useEffect(() => {
     let active = true;
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+    const isTickRefresh = prevTickRef.current !== refreshTick;
+    prevTickRef.current = refreshTick;
+
     fetch('/api/narratives')
       .then((r) => r.json() as Promise<NarrativesResponse>)
       .then((d) => {
-        if (active) {
-          setData(d);
-          setError(null);
+        if (!active) return;
+        setData(d);
+        setError(null);
+        if (isTickRefresh) {
+          setHighlighted(true);
+          highlightTimer = setTimeout(() => {
+            if (active) setHighlighted(false);
+          }, 650);
         }
       })
       .catch((e: Error) => {
@@ -59,6 +79,7 @@ export function Narratives({
       });
     return () => {
       active = false;
+      if (highlightTimer) clearTimeout(highlightTimer);
     };
   }, [refreshTick]);
 
@@ -134,31 +155,48 @@ export function Narratives({
     );
   };
 
+  const highlightClass = highlighted
+    ? 'ring-1 ring-[#e59a28]/60 shadow-[0_0_20px_rgba(229,154,40,0.14)] transition-[box-shadow,ring-color] duration-300'
+    : 'transition-[box-shadow,ring-color] duration-500';
+
   return (
-    <div className="space-y-4">
-      <Card
-        title="Running now"
-        subtitle="Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction."
-      >
-        {data.running.length === 0 ? (
-          <p className="text-sm text-[#cfc3b4]">
-            Nothing has passed every safety check in the last 30 minutes.
-          </p>
-        ) : (
-          <>
-            <div className="sm:hidden space-y-2.5">
-              {data.running.map((r) => {
-                const isOpen = openMints.has(r.mint);
-                const bi = bandInfo(r.band);
-                const mcap =
-                  r.mcap_usd === null || r.mcap_usd === undefined
-                    ? 'unknown'
-                    : `$${fmt(r.mcap_usd)}`;
-                return (
-                  <div
-                    key={`m-${r.mint}`}
-                    className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-3 space-y-2.5"
-                  >
+    <motion.div
+      className="space-y-4"
+      variants={staggerContainerVariants}
+      initial="initial"
+      animate="animate"
+    >
+      <motion.div variants={staggerItemVariants}>
+        <Card
+          title="Running now"
+          subtitle="Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction."
+          className={highlightClass}
+        >
+          {data.running.length === 0 ? (
+            <p className="text-sm text-[#cfc3b4]">
+              Nothing has passed every safety check in the last 30 minutes.
+            </p>
+          ) : (
+            <>
+              <div className="sm:hidden space-y-2.5">
+                {data.running.map((r, idx) => {
+                  const isOpen = openMints.has(r.mint);
+                  const bi = bandInfo(r.band);
+                  const mcap =
+                    r.mcap_usd === null || r.mcap_usd === undefined
+                      ? 'unknown'
+                      : `$${fmt(r.mcap_usd)}`;
+                  return (
+                    <motion.div
+                      key={`m-${r.mint}`}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        ...FAST_EASE_OUT,
+                        delay: boundedStaggerDelay(idx),
+                      }}
+                      className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-3 space-y-2.5"
+                    >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5 text-sm">
@@ -210,36 +248,50 @@ export function Narratives({
                       </div>
                     </dl>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        aria-expanded={isOpen}
-                        onClick={() => toggleMint(r.mint)}
-                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[124px] min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                          isOpen
-                            ? 'bg-[#e59a28] text-[#110e0b]'
-                            : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
-                        }`}
-                      >
-                        {isOpen ? (
-                          <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-                        ) : (
-                          <Info className="h-3.5 w-3.5" aria-hidden="true" />
-                        )}
-                        {isOpen ? 'Hide' : 'Explain score'}
-                      </button>
-                      <WatchButton
-                        mint={r.mint}
-                        watched={watchedSet.has(r.mint)}
-                        onToggle={onToggleWatch}
-                      />
-                    </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <motion.button
+                          type="button"
+                          aria-expanded={isOpen}
+                          whileTap={BUTTON_TAP}
+                          onClick={() => toggleMint(r.mint)}
+                          className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[124px] min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                            isOpen
+                              ? 'bg-[#e59a28] text-[#110e0b]'
+                              : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
+                          }`}
+                        >
+                          {isOpen ? (
+                            <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                          ) : (
+                            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                          )}
+                          {isOpen ? 'Hide' : 'Explain score'}
+                        </motion.button>
+                        <WatchButton
+                          mint={r.mint}
+                          watched={watchedSet.has(r.mint)}
+                          onToggle={onToggleWatch}
+                        />
+                      </div>
 
-                    {isOpen && renderBreakdown(r)}
-                  </div>
-                );
-              })}
-            </div>
+                      <AnimatePresence initial={false}>
+                        {isOpen && (
+                          <motion.div
+                            key={`m-breakdown-${r.mint}`}
+                            variants={expandCollapseVariants}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            className="overflow-hidden"
+                          >
+                            {renderBreakdown(r)}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })}
+              </div>
 
             <div className="hidden sm:block overflow-x-auto">
               <table className="w-full border-collapse text-sm">
@@ -254,17 +306,25 @@ export function Narratives({
                     <th className="py-2.5 pl-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#2d251d]/70">
-                  {data.running.map((r) => {
-                    const isOpen = openMints.has(r.mint);
-                    const bi = bandInfo(r.band);
-                    const mcap =
-                      r.mcap_usd === null || r.mcap_usd === undefined
-                        ? 'unknown'
-                        : `$${fmt(r.mcap_usd)}`;
-                    return (
-                      <Fragment key={r.mint}>
-                        <tr className="hover:bg-[#211c16]/40 transition-colors">
+                  <tbody className="divide-y divide-[#2d251d]/70">
+                    {data.running.map((r, idx) => {
+                      const isOpen = openMints.has(r.mint);
+                      const bi = bandInfo(r.band);
+                      const mcap =
+                        r.mcap_usd === null || r.mcap_usd === undefined
+                          ? 'unknown'
+                          : `$${fmt(r.mcap_usd)}`;
+                      return (
+                        <Fragment key={r.mint}>
+                          <motion.tr
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{
+                              ...FAST_EASE_OUT,
+                              delay: boundedStaggerDelay(idx),
+                            }}
+                            className="hover:bg-[#211c16]/40 transition-colors"
+                          >
                           <td className="py-3 pr-4 align-middle whitespace-nowrap">
                             <div className="flex items-center gap-2 min-w-0">
                               <TokenAvatar
@@ -308,9 +368,10 @@ export function Narratives({
                           </td>
                           <td className="py-3 pl-3 align-middle text-right whitespace-nowrap">
                             <div className="inline-flex items-center justify-end gap-2">
-                              <button
+                              <motion.button
                                 type="button"
                                 aria-expanded={isOpen}
+                                whileTap={BUTTON_TAP}
                                 onClick={() => toggleMint(r.mint)}
                                 className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[124px] min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                                   isOpen
@@ -324,7 +385,7 @@ export function Narratives({
                                   <Info className="h-3.5 w-3.5" aria-hidden="true" />
                                 )}
                                 {isOpen ? 'Hide' : 'Explain score'}
-                              </button>
+                              </motion.button>
                               <WatchButton
                                 mint={r.mint}
                                 watched={watchedSet.has(r.mint)}
@@ -332,14 +393,26 @@ export function Narratives({
                               />
                             </div>
                           </td>
-                        </tr>
-                        {isOpen && (
-                          <tr>
-                            <td colSpan={7} className="pb-4 pt-1">
-                              {renderBreakdown(r)}
-                            </td>
-                          </tr>
-                        )}
+                        </motion.tr>
+                        <AnimatePresence initial={false}>
+                          {isOpen && (
+                            <tr key={`${r.mint}-breakdown`}>
+                              <td colSpan={7} className="p-0">
+                                <motion.div
+                                  variants={expandCollapseVariants}
+                                  initial="initial"
+                                  animate="animate"
+                                  exit="exit"
+                                  className="overflow-hidden"
+                                >
+                                  <div className="pb-4 pt-1">
+                                    {renderBreakdown(r)}
+                                  </div>
+                                </motion.div>
+                              </td>
+                            </tr>
+                          )}
+                        </AnimatePresence>
                       </Fragment>
                     );
                   })}
@@ -348,34 +421,43 @@ export function Narratives({
             </div>
           </>
         )}
-      </Card>
+        </Card>
+      </motion.div>
 
-      <Card
-        title="Themes this hour"
-        subtitle="A theme is a word that three or more trending coins share in their name or description. Share is how much of the last hour's trading went to coins with that word."
-      >
-        {themes.length === 0 ? (
-          <p className="text-sm text-[#cfc3b4]">No themes yet.</p>
-        ) : (
-          <div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
-                    <th className="py-2.5 pr-4 text-left">Word</th>
-                    <th className="py-2.5 px-3 text-right w-24">Coins</th>
-                    <th className="py-2.5 px-3 text-right">Traded, 1 h</th>
-                    <th className="py-2.5 pl-3 text-right">Share</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#2d251d]/70">
-                  {visibleThemes.map((t) => {
-                    const sharePct = Math.min(100, Math.max(0, t.share * 100));
-                    return (
-                      <tr
-                        key={t.keyword}
-                        className="hover:bg-[#211c16]/40 transition-colors"
-                      >
+      <motion.div variants={staggerItemVariants}>
+        <Card
+          title="Themes this hour"
+          subtitle="A theme is a word that three or more trending coins share in their name or description. Share is how much of the last hour's trading went to coins with that word."
+          className={highlightClass}
+        >
+          {themes.length === 0 ? (
+            <p className="text-sm text-[#cfc3b4]">No themes yet.</p>
+          ) : (
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
+                      <th className="py-2.5 pr-4 text-left">Word</th>
+                      <th className="py-2.5 px-3 text-right w-24">Coins</th>
+                      <th className="py-2.5 px-3 text-right">Traded, 1 h</th>
+                      <th className="py-2.5 pl-3 text-right">Share</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#2d251d]/70">
+                    {visibleThemes.map((t, idx) => {
+                      const sharePct = Math.min(100, Math.max(0, t.share * 100));
+                      return (
+                        <motion.tr
+                          key={t.keyword}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            ...FAST_EASE_OUT,
+                            delay: boundedStaggerDelay(idx),
+                          }}
+                          className="hover:bg-[#211c16]/40 transition-colors"
+                        >
                         <td className="py-2.5 pr-4 font-medium text-[#f4ede2]">
                           {t.keyword}
                         </td>
@@ -398,15 +480,16 @@ export function Narratives({
                             </span>
                           </div>
                         </td>
-                      </tr>
+                      </motion.tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
             {themes.length > 5 && (
-              <button
+              <motion.button
                 type="button"
+                whileTap={BUTTON_TAP}
                 onClick={() => setShowAllThemes((s) => !s)}
                 className="mt-3 inline-flex items-center justify-center gap-1.5 min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#e59a28]/50 transition-colors cursor-pointer"
               >
@@ -418,28 +501,37 @@ export function Narratives({
                 {showAllThemes
                   ? 'Show top 5'
                   : `Show all ${themes.length} themes`}
-              </button>
+              </motion.button>
             )}
           </div>
         )}
-      </Card>
+        </Card>
+      </motion.div>
 
-      <Card
-        title="Best calls: wallet scorecard"
-        subtitle="How tracked wallets have performed on their recorded trades."
-      >
-        {data.wallets.length === 0 ? (
-          <p className="text-sm text-[#cfc3b4]">
-            No wallets tracked. Add some to wallets.txt.
-          </p>
-        ) : (
-          <div>
-            <div className="sm:hidden space-y-2.5">
-              {data.wallets.map((w) => (
-                <div
-                  key={`m-${w.address}`}
-                  className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-3 space-y-2"
-                >
+      <motion.div variants={staggerItemVariants}>
+        <Card
+          title="Best calls: wallet scorecard"
+          subtitle="How tracked wallets have performed on their recorded trades."
+          className={highlightClass}
+        >
+          {data.wallets.length === 0 ? (
+            <p className="text-sm text-[#cfc3b4]">
+              No wallets tracked. Add some to wallets.txt.
+            </p>
+          ) : (
+            <div>
+              <div className="sm:hidden space-y-2.5">
+                {data.wallets.map((w, idx) => (
+                  <motion.div
+                    key={`m-${w.address}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      ...FAST_EASE_OUT,
+                      delay: boundedStaggerDelay(idx),
+                    }}
+                    className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-3 space-y-2"
+                  >
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <WalletDisplay address={w.address} label={w.label} />
                     <span className="text-xs text-[#cfc3b4]">{w.class}</span>
@@ -481,7 +573,7 @@ export function Narratives({
                       </dd>
                     </div>
                   </dl>
-                </div>
+                </motion.div>
               ))}
             </div>
 
@@ -498,9 +590,15 @@ export function Narratives({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2d251d]/70">
-                  {data.wallets.map((w) => (
-                    <tr
+                  {data.wallets.map((w, idx) => (
+                    <motion.tr
                       key={w.address}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        ...FAST_EASE_OUT,
+                        delay: boundedStaggerDelay(idx),
+                      }}
                       className="hover:bg-[#211c16]/40 transition-colors"
                     >
                       <td className="py-2.5 pr-4 whitespace-nowrap">
@@ -540,7 +638,7 @@ export function Narratives({
                           </span>
                         )}
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
@@ -558,22 +656,31 @@ export function Narratives({
             )}
           </div>
         )}
-      </Card>
+        </Card>
+      </motion.div>
 
-      <Card
-        title="Calibration: later price by score band"
-        subtitle="Checks each coin's price 1, 6 and 24 hours after scoring."
-      >
-        {data.calibration.rows.length === 0 ? (
-          <p className="text-sm text-[#cfc3b4]">{calEmpty}</p>
-        ) : (
-          <>
-            <div className="sm:hidden space-y-2.5">
-              {data.calibration.rows.map((r, idx) => (
-                <div
-                  key={`m-${r.band}-${r.horizon_h}-${idx}`}
-                  className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-3 space-y-2"
-                >
+      <motion.div variants={staggerItemVariants}>
+        <Card
+          title="Calibration: later price by score band"
+          subtitle="Checks each coin's price 1, 6 and 24 hours after scoring."
+          className={highlightClass}
+        >
+          {data.calibration.rows.length === 0 ? (
+            <p className="text-sm text-[#cfc3b4]">{calEmpty}</p>
+          ) : (
+            <>
+              <div className="sm:hidden space-y-2.5">
+                {data.calibration.rows.map((r, idx) => (
+                  <motion.div
+                    key={`m-${r.band}-${r.horizon_h}-${idx}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      ...FAST_EASE_OUT,
+                      delay: boundedStaggerDelay(idx),
+                    }}
+                    className="rounded-lg border border-[#2d251d] bg-[#211c16]/70 p-3 space-y-2"
+                  >
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="font-medium text-[#f4ede2]">
                       {bandInfo(r.band).label}
@@ -608,7 +715,7 @@ export function Narratives({
                       </dd>
                     </div>
                   </dl>
-                </div>
+                </motion.div>
               ))}
             </div>
 
@@ -625,8 +732,14 @@ export function Narratives({
                 </thead>
                 <tbody className="divide-y divide-[#2d251d]/70">
                   {data.calibration.rows.map((r, idx) => (
-                    <tr
+                    <motion.tr
                       key={`${r.band}-${r.horizon_h}-${idx}`}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        ...FAST_EASE_OUT,
+                        delay: boundedStaggerDelay(idx),
+                      }}
                       className="hover:bg-[#211c16]/40 transition-colors"
                     >
                       <td className="py-2.5 pr-4 font-medium text-[#f4ede2] whitespace-nowrap">
@@ -652,14 +765,15 @@ export function Narratives({
                       <td className="py-2.5 pl-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
                         {fmt(r.positiveShare * 100)}%
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </>
         )}
-      </Card>
-    </div>
+        </Card>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -1,5 +1,14 @@
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { AddressLink, Badge } from './ui';
 import { fmt, short } from '../lib/format';
+import {
+  FAST_EASE_OUT,
+  QUICK_FADE_TRANSITION,
+  SNAPPY_SPRING,
+  boundedStaggerDelay,
+  fadeInVariants,
+} from '../lib/motion';
 import { isNullableString, usePersistedState } from '../lib/tabState';
 import type { TracerEdge, TracerNode } from '../types';
 
@@ -24,6 +33,8 @@ export function TracerGraph({
     null,
     { validate: isNullableString },
   );
+  const [hoveredAddress, setHoveredAddress] = useState<string | null>(null);
+  const [hoveredEdgeIdx, setHoveredEdgeIdx] = useState<number | null>(null);
 
   if (!nodes.length) return null;
 
@@ -94,15 +105,55 @@ export function TracerGraph({
             const y2 = b.y + nodeH / 2;
             const cx = (x1 + x2) / 2;
             const d = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`;
+            const isEdgeHighlighted =
+              hoveredEdgeIdx === idx ||
+              (hoveredAddress !== null &&
+                (e.from === hoveredAddress || e.to === hoveredAddress)) ||
+              (selectedAddress !== null &&
+                (e.from === selectedAddress || e.to === selectedAddress));
+            const isDimmed =
+              (hoveredAddress !== null ||
+                hoveredEdgeIdx !== null ||
+                selectedAddress !== null) &&
+              !isEdgeHighlighted;
             return (
-              <g key={`${e.from}-${e.to}-${idx}`}>
-                <path
+              <motion.g
+                key={`${e.from}-${e.to}-${idx}`}
+                onMouseEnter={() => setHoveredEdgeIdx(idx)}
+                onMouseLeave={() => setHoveredEdgeIdx(null)}
+                className="cursor-pointer"
+              >
+                <motion.path
                   d={d}
                   fill="none"
-                  stroke="#cfc3b4"
-                  strokeOpacity="0.45"
-                  strokeWidth="1.5"
+                  stroke={isEdgeHighlighted ? '#e59a28' : '#cfc3b4'}
+                  strokeWidth={isEdgeHighlighted ? 2.25 : 1.5}
                   markerEnd="url(#tracer-arrow)"
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{
+                    pathLength: 1,
+                    opacity: isEdgeHighlighted ? 0.95 : isDimmed ? 0.2 : 0.45,
+                  }}
+                  transition={{
+                    pathLength: {
+                      duration: 0.28,
+                      delay: boundedStaggerDelay(idx, 0.025),
+                      ease: [0.22, 1, 0.36, 1],
+                    },
+                    opacity: QUICK_FADE_TRANSITION,
+                  }}
+                />
+                <motion.circle
+                  cx={x1}
+                  cy={y1}
+                  r={isEdgeHighlighted ? 3.5 : 2.5}
+                  fill={isEdgeHighlighted ? '#e59a28' : '#cfc3b4'}
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{
+                    scale: isEdgeHighlighted ? 1 : 0.75,
+                    opacity: isEdgeHighlighted ? 0.95 : isDimmed ? 0.2 : 0.5,
+                  }}
+                  transition={SNAPPY_SPRING}
                 />
                 <text
                   x={(x1 + x2) / 2}
@@ -110,20 +161,26 @@ export function TracerGraph({
                   fontSize="10"
                   textAnchor="middle"
                   fill="#e59a28"
+                  fillOpacity={isDimmed ? 0.45 : 1}
                   className="tabular-nums"
                 >
                   ${fmt(e.usd)}
                 </text>
-              </g>
+              </motion.g>
             );
           })}
 
-          {nodes.map((n) => {
+          {nodes.map((n, idx) => {
             const p = pos[n.address];
             const stroke = (n.type && TYPE_COLOR[n.type]) || '#2d251d';
             const isSelected = selectedAddress === n.address;
+            const isHovered = hoveredAddress === n.address;
+            const dotColor =
+              isSelected
+                ? '#f4ede2'
+                : (n.type && TYPE_COLOR[n.type]) || '#e59a28';
             return (
-              <g
+              <motion.g
                 key={n.address}
                 role="button"
                 tabIndex={0}
@@ -135,6 +192,19 @@ export function TracerGraph({
                     setSelectedAddress(n.address);
                   }
                 }}
+                onMouseEnter={() => setHoveredAddress(n.address)}
+                onMouseLeave={() => setHoveredAddress(null)}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  ...FAST_EASE_OUT,
+                  delay: boundedStaggerDelay(idx, 0.03),
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  transformOrigin: `${p.x + nodeW / 2}px ${p.y + nodeH / 2}px`,
+                }}
                 className="cursor-pointer"
               >
                 <rect
@@ -143,10 +213,24 @@ export function TracerGraph({
                   width={nodeW}
                   height={nodeH}
                   rx="8"
-                  fill={isSelected ? '#211c16' : '#191511'}
-                  stroke={isSelected ? '#f4ede2' : stroke}
-                  strokeWidth={n.type || isSelected ? 2 : 1.25}
+                  fill={isSelected ? '#211c16' : isHovered ? '#1f1a15' : '#191511'}
+                  stroke={isSelected ? '#f4ede2' : isHovered ? '#e59a28' : stroke}
+                  strokeWidth={n.type || isSelected || isHovered ? 2 : 1.25}
                 />
+                {(isSelected || isHovered || n.type) && (
+                  <motion.circle
+                    cx={p.x + nodeW - 12}
+                    cy={p.y + 12}
+                    r={3}
+                    fill={dotColor}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{
+                      scale: isSelected || isHovered ? 1.15 : 0.85,
+                      opacity: isSelected || isHovered ? 1 : 0.75,
+                    }}
+                    transition={SNAPPY_SPRING}
+                  />
+                )}
                 <text
                   x={p.x + 10}
                   y={p.y + 18}
@@ -164,44 +248,53 @@ export function TracerGraph({
                 >
                   {n.type ? n.type : short(n.address)}
                 </text>
-              </g>
+              </motion.g>
             );
           })}
         </svg>
       </div>
 
-      {selectedNode && (
-        <div className="rounded-lg border border-[#2d251d] bg-[#211c16] p-3 text-xs space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <strong className="text-sm text-[#f4ede2]">
-                {selectedNode.label || short(selectedNode.address)}
-              </strong>
-              <AddressLink address={selectedNode.address} />
-              {selectedNode.type && (
-                <Badge
-                  tone={
-                    selectedNode.type === 'exchange'
-                      ? 'good'
-                      : selectedNode.type === 'mixer'
-                        ? 'bad'
-                        : 'mid'
-                  }
-                >
-                  {selectedNode.type}
-                </Badge>
-              )}
+      <AnimatePresence mode="wait">
+        {selectedNode && (
+          <motion.div
+            key={selectedNode.address}
+            variants={fadeInVariants}
+            initial="initial"
+            animate="animate"
+            exit={{ opacity: 0, y: 4, transition: { duration: 0.12 } }}
+            className="rounded-lg border border-[#2d251d] bg-[#211c16] p-3 text-xs space-y-2"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <strong className="text-sm text-[#f4ede2]">
+                  {selectedNode.label || short(selectedNode.address)}
+                </strong>
+                <AddressLink address={selectedNode.address} />
+                {selectedNode.type && (
+                  <Badge
+                    tone={
+                      selectedNode.type === 'exchange'
+                        ? 'good'
+                        : selectedNode.type === 'mixer'
+                          ? 'bad'
+                          : 'mid'
+                    }
+                  >
+                    {selectedNode.type}
+                  </Badge>
+                )}
+              </div>
+              <span className="text-[#cfc3b4] tabular-nums">
+                Hop {selectedNode.depth}
+              </span>
             </div>
-            <span className="text-[#cfc3b4] tabular-nums">
-              Hop {selectedNode.depth}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-4 text-[#cfc3b4] tabular-nums">
-            <span>Incoming transfers: {incoming.length}</span>
-            <span>Outgoing transfers: {outgoing.length}</span>
-          </div>
-        </div>
-      )}
+            <div className="flex flex-wrap gap-4 text-[#cfc3b4] tabular-nums">
+              <span>Incoming transfers: {incoming.length}</span>
+              <span>Outgoing transfers: {outgoing.length}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
