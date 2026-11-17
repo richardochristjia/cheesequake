@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { BookmarkCheck, Eye } from 'lucide-react';
 import { B58, short, type Tone } from '../lib/format';
 import type { AlertItem } from '../types';
 
@@ -200,12 +201,17 @@ export function WatchButton({
       type="button"
       aria-pressed={watched}
       onClick={() => onToggle(mint)}
-      className={`min-h-[44px] px-3.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+      className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[100px] min-h-[44px] px-3.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
         watched
           ? 'bg-[#e59a28] text-[#110e0b] hover:bg-[#e59a28]/90'
           : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
       }`}
     >
+      {watched ? (
+        <BookmarkCheck className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
       {watched ? 'Watching' : 'Watch'}
     </button>
   );

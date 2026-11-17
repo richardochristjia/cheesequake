@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp, Info } from 'lucide-react';
 import {
   AddressLink,
   Badge,
@@ -214,12 +215,17 @@ export function Narratives({
                         type="button"
                         aria-expanded={isOpen}
                         onClick={() => toggleMint(r.mint)}
-                        className={`min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[124px] min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                           isOpen
                             ? 'bg-[#e59a28] text-[#110e0b]'
                             : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
                         }`}
                       >
+                        {isOpen ? (
+                          <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
                         {isOpen ? 'Hide' : 'Explain score'}
                       </button>
                       <WatchButton
@@ -306,12 +312,17 @@ export function Narratives({
                                 type="button"
                                 aria-expanded={isOpen}
                                 onClick={() => toggleMint(r.mint)}
-                                className={`min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                                className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[124px] min-h-[44px] rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                                   isOpen
                                     ? 'bg-[#e59a28] text-[#110e0b]'
                                     : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
                                 }`}
                               >
+                                {isOpen ? (
+                                  <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                                ) : (
+                                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                                )}
                                 {isOpen ? 'Hide' : 'Explain score'}
                               </button>
                               <WatchButton
@@ -397,8 +408,13 @@ export function Narratives({
               <button
                 type="button"
                 onClick={() => setShowAllThemes((s) => !s)}
-                className="mt-3 min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#e59a28]/50 transition-colors cursor-pointer"
+                className="mt-3 inline-flex items-center justify-center gap-1.5 min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#e59a28]/50 transition-colors cursor-pointer"
               >
+                {showAllThemes ? (
+                  <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
                 {showAllThemes
                   ? 'Show top 5'
                   : `Show all ${themes.length} themes`}

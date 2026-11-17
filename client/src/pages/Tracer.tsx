@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { GitBranch } from 'lucide-react';
 import { Card } from '../components/ui';
 import { TracerGraph } from '../components/TracerGraph';
 import { B58 } from '../lib/format';
@@ -67,8 +68,9 @@ export function Tracer({ refreshTick }: { refreshTick: number }) {
         />
         <button
           type="submit"
-          className="min-h-[44px] rounded-lg bg-[#e59a28] px-4 py-2 text-sm font-medium text-[#110e0b] hover:bg-[#e59a28]/90 transition-colors cursor-pointer"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] rounded-lg bg-[#e59a28] px-4 py-2 text-sm font-medium text-[#110e0b] hover:bg-[#e59a28]/90 transition-colors cursor-pointer"
         >
+          <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
           Trace
         </button>
       </form>
