@@ -1,4 +1,11 @@
 import { useState, type MouseEvent } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  FAST_EASE_OUT,
+  QUICK_FADE_TRANSITION,
+  SNAPPY_SPRING,
+  fadeInVariants,
+} from '../lib/motion';
 import type { MarketHourlyRow } from '../types';
 
 const ZONES = [
@@ -72,9 +79,15 @@ export function TrenchChart({
   const active = hoverIdx !== null ? pts[hoverIdx] : null;
   const activeX = active ? x(active.hour) : 0;
   const activeY = active ? y(active.index_value) : 0;
+  const activeZone = active ? zoneName(active.index_value) : null;
 
   return (
-    <div className="relative">
+    <motion.div
+      className="relative"
+      variants={fadeInVariants}
+      initial="initial"
+      animate="animate"
+    >
       <div className="flex items-stretch gap-2">
         <div
           aria-hidden="true"
@@ -109,14 +122,17 @@ export function TrenchChart({
           {ZONES.map((z) => {
             const yTop = y(z.max);
             const yBot = y(z.min);
+            const isHoveredZone = activeZone === z.label;
             return (
-              <rect
+              <motion.rect
                 key={z.label}
                 x={0}
                 y={yTop}
                 width={plotW}
                 height={yBot - yTop}
                 fill={z.fill}
+                animate={{ opacity: activeZone ? (isHoveredZone ? 1 : 0.65) : 1 }}
+                transition={QUICK_FADE_TRANSITION}
               />
             );
           })}
@@ -133,36 +149,57 @@ export function TrenchChart({
             />
           ))}
 
-          <path d={areaPath} fill="url(#trench-area-grad)" />
-          <polyline
+          <motion.path
+            d={areaPath}
+            fill="url(#trench-area-grad)"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={FAST_EASE_OUT}
+          />
+          <motion.polyline
             points={linePoints}
             fill="none"
             stroke="#e59a28"
             strokeWidth="2"
             strokeLinejoin="round"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ ...FAST_EASE_OUT, delay: 0.04 }}
           />
 
-          {active && (
-            <g>
-              <line
-                x1={activeX}
-                x2={activeX}
-                y1={0}
-                y2={plotH}
-                stroke="#f4ede2"
-                strokeOpacity="0.35"
-                strokeDasharray="3 3"
-              />
-              <circle
-                cx={activeX}
-                cy={activeY}
-                r="4.5"
-                fill="#e59a28"
-                stroke="#110e0b"
-                strokeWidth="2"
-              />
-            </g>
-          )}
+          <AnimatePresence>
+            {active && (
+              <motion.g
+                key="hover-crosshair"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={QUICK_FADE_TRANSITION}
+              >
+                <line
+                  x1={activeX}
+                  x2={activeX}
+                  y1={0}
+                  y2={plotH}
+                  stroke="#f4ede2"
+                  strokeOpacity="0.35"
+                  strokeDasharray="3 3"
+                />
+                <motion.circle
+                  cx={activeX}
+                  cy={activeY}
+                  r={4.5}
+                  fill="#e59a28"
+                  stroke="#110e0b"
+                  strokeWidth="2"
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.5, opacity: 0 }}
+                  transition={SNAPPY_SPRING}
+                />
+              </motion.g>
+            )}
+          </AnimatePresence>
         </svg>
 
         <div
@@ -177,19 +214,26 @@ export function TrenchChart({
         </div>
       </div>
 
-      {active && (
-        <div
-          className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-[#2d251d] bg-[#211c16] px-3 py-1.5 text-xs text-[#f4ede2] tabular-nums"
-          aria-live="polite"
-        >
-          <span className="font-semibold text-[#e59a28]">
-            {active.index_value} ({zoneName(active.index_value)})
-          </span>
-          <span className="text-[#cfc3b4]">
-            {new Date(active.hour * 1000).toLocaleString()}
-          </span>
-        </div>
-      )}
-    </div>
+      <AnimatePresence>
+        {active && (
+          <motion.div
+            key="hover-readout"
+            variants={fadeInVariants}
+            initial="initial"
+            animate="animate"
+            exit={{ opacity: 0, y: 2, transition: { duration: 0.1 } }}
+            className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-[#2d251d] bg-[#211c16] px-3 py-1.5 text-xs text-[#f4ede2] tabular-nums"
+            aria-live="polite"
+          >
+            <span className="font-semibold text-[#e59a28]">
+              {active.index_value} ({zoneName(active.index_value)})
+            </span>
+            <span className="text-[#cfc3b4]">
+              {new Date(active.hour * 1000).toLocaleString()}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

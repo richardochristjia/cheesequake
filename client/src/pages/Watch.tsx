@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity,
   CandlestickChart,
@@ -28,6 +29,13 @@ import {
   short,
   when,
 } from '../lib/format';
+import {
+  BUTTON_TAP,
+  expandCollapseVariants,
+  fadeInVariants,
+  staggerContainerVariants,
+  staggerItemVariants,
+} from '../lib/motion';
 import { isBoolean, isString, usePersistedState } from '../lib/tabState';
 import type { WatchCoin, WatchResponse } from '../types';
 
@@ -109,8 +117,9 @@ function WatchCard({
           <Badge tone={tone}>{label}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <motion.button
             type="button"
+            whileTap={BUTTON_TAP}
             aria-expanded={chartOpen}
             onClick={() => setChartOpen((o) => !o)}
             className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[116px] min-h-[44px] rounded-lg px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${
@@ -125,15 +134,16 @@ function WatchCard({
               <CandlestickChart className="h-3.5 w-3.5" aria-hidden="true" />
             )}
             {chartOpen ? 'Hide chart' : 'Show chart'}
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             type="button"
+            whileTap={BUTTON_TAP}
             onClick={() => onUnwatch(coin.mint)}
             className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             Unwatch
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -170,51 +180,80 @@ function WatchCard({
         ))}
       </div>
 
-      {chartOpen && (
-        <div className="my-3">
-          <iframe
-            className="w-full h-[640px] min-h-[420px] resize-y rounded-lg border border-[#2d251d] bg-[#110e0b]"
-            src={`https://dexscreener.com/solana/${encodeURIComponent(coin.pool || coin.mint)}?embed=1&theme=dark&trades=0&info=0`}
-            title={`${coin.symbol || short(coin.mint)} live chart`}
-            loading="lazy"
-          />
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {chartOpen && (
+          <motion.div
+            key="chart"
+            variants={expandCollapseVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="my-3 overflow-hidden"
+          >
+            <iframe
+              className="w-full h-[640px] min-h-[420px] resize-y rounded-lg border border-[#2d251d] bg-[#110e0b]"
+              src={`https://dexscreener.com/solana/${encodeURIComponent(coin.pool || coin.mint)}?embed=1&theme=dark&trades=0&info=0`}
+              title={`${coin.symbol || short(coin.mint)} live chart`}
+              loading="lazy"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {alerts.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#cfc3b4]">
-                <th className="py-2 pr-3">Time</th>
-                <th className="py-2 pr-3">Kind</th>
-                <th className="py-2 pr-3">Wallet</th>
-                <th className="py-2">Detail</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#2d251d]/70">
-              {alerts.map((a, idx) => (
-                <tr key={`${a.ts}-${a.kind}-${idx}`}>
-                  <td className="py-2 pr-3 text-xs text-[#cfc3b4] whitespace-nowrap tabular-nums">
-                    {when(a.ts)}
-                  </td>
-                  <td className="py-2 pr-3 whitespace-nowrap">
-                    <KindTooltip kind={a.kind} />
-                  </td>
-                  <td className="py-2 pr-3 text-xs">
-                    <AlertWalletDisplay alert={a} />
-                  </td>
-                  <td className="py-2 text-xs text-[#f4ede2]/90 tabular-nums">
-                    {formatAlertDetail(a)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-xs text-[#cfc3b4]">No alerts for this coin yet.</p>
-      )}
+      <AnimatePresence mode="wait" initial={false}>
+        {alerts.length ? (
+          <motion.div
+            key="alerts-table"
+            variants={expandCollapseVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="overflow-hidden"
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[#2d251d] text-left text-xs font-medium text-[#cfc3b4]">
+                    <th className="py-2 pr-3">Time</th>
+                    <th className="py-2 pr-3">Kind</th>
+                    <th className="py-2 pr-3">Wallet</th>
+                    <th className="py-2">Detail</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#2d251d]/70">
+                  {alerts.map((a, idx) => (
+                    <tr key={`${a.ts}-${a.kind}-${idx}`}>
+                      <td className="py-2 pr-3 text-xs text-[#cfc3b4] whitespace-nowrap tabular-nums">
+                        {when(a.ts)}
+                      </td>
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        <KindTooltip kind={a.kind} />
+                      </td>
+                      <td className="py-2 pr-3 text-xs">
+                        <AlertWalletDisplay alert={a} />
+                      </td>
+                      <td className="py-2 text-xs text-[#f4ede2]/90 tabular-nums">
+                        {formatAlertDetail(a)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.p
+            key="no-alerts"
+            variants={expandCollapseVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="overflow-hidden text-xs text-[#cfc3b4]"
+          >
+            No alerts for this coin yet.
+          </motion.p>
+        )}
+      </AnimatePresence>
     </Card>
   );
 }
@@ -298,13 +337,14 @@ export function Watch({
             aria-label="Coin mint address"
             className="glass-input min-h-[44px] w-full max-w-md rounded-lg px-3 py-2 text-sm text-[#f4ede2] placeholder:text-[#cfc3b4]/70"
           />
-          <button
+          <motion.button
             type="submit"
+            whileTap={BUTTON_TAP}
             className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] rounded-lg bg-[#e59a28] px-4 py-2 text-sm font-medium text-[#110e0b] hover:bg-[#e59a28]/90 transition-colors cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Watch coin
-          </button>
+          </motion.button>
         </form>
         <p className="mt-2 text-xs text-[#cfc3b4]">{note}</p>
       </Card>
@@ -322,19 +362,41 @@ export function Watch({
       )}
 
       {!error && coins !== null && coins.length === 0 && (
-        <Card title="Watched coins">
-          <EmptyState
-            title="No coins watched yet"
-            description="No coins watched yet. Paste a mint address above or click Watch on any coin in Narratives or Ping."
-          />
-        </Card>
+        <motion.div
+          variants={fadeInVariants}
+          initial="initial"
+          animate="animate"
+        >
+          <Card title="Watched coins">
+            <EmptyState
+              title="No coins watched yet"
+              description="No coins watched yet. Paste a mint address above or click Watch on any coin in Narratives or Ping."
+            />
+          </Card>
+        </motion.div>
       )}
 
-      {!error &&
-        coins !== null &&
-        coins.map((c) => (
-          <WatchCard key={c.mint} coin={c} onUnwatch={handleUnwatch} />
-        ))}
+      {!error && coins !== null && coins.length > 0 && (
+        <motion.div
+          variants={staggerContainerVariants}
+          initial="initial"
+          animate="animate"
+          className="space-y-4"
+        >
+          <AnimatePresence initial={false}>
+            {coins.map((c) => (
+              <motion.div
+                key={c.mint}
+                variants={staggerItemVariants}
+                exit={{ opacity: 0, y: -6, transition: { duration: 0.14 } }}
+                layout="position"
+              >
+                <WatchCard coin={c} onUnwatch={handleUnwatch} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
     </div>
   );
 }
