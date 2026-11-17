@@ -1811,4 +1811,204 @@ describe('Cheesequake UI', () => {
       expect(screen.getByRole('tab', { name: /Narratives/i })).toHaveAttribute('aria-selected', 'true');
     });
   });
+
+  it('NotificationBell records ping and narrative toasts (including >4 evicted), preserves unread on open/close, and supports click-to-navigate, mark all read, clear, Escape, and outside click', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    globalThis.fetch = mockFetch({
+      ping: () => ({
+        alerts: [
+          { ts: nowSec - 1, kind: 'buy', mint: addr('1'), symbol: 'ONE', detail: { usd: 110 } },
+          { ts: nowSec - 2, kind: 'buy', mint: addr('2'), symbol: 'TWO', detail: { usd: 120 } },
+          { ts: nowSec - 3, kind: 'buy', mint: addr('3'), symbol: 'THREE', detail: { usd: 130 } },
+          { ts: nowSec - 4, kind: 'buy', mint: addr('4'), symbol: 'FOUR', detail: { usd: 140 } },
+          { ts: nowSec - 5, kind: 'exit_wallet', mint: addr('5'), symbol: 'FIVE', detail: { usd: 150 } },
+        ],
+        wallets: [],
+      }),
+      narratives: () => ({
+        running: [
+          {
+            mint: addr('6'),
+            symbol: 'NARR',
+            band: 'strong',
+            score: 91,
+            theme: 'AI cats',
+            signals: {},
+            updated_at: nowSec,
+          },
+        ],
+        themes: [],
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('6');
+    });
+
+    // Live toaster is capped at 4, while notification history keeps all 6
+    const bellBtn = screen.getByRole('button', { name: 'Notifications' });
+    fireEvent.click(bellBtn);
+
+    const dialog = screen.getByRole('dialog', { name: 'Notification history' });
+    expect(within(dialog).getByText('ONE')).toBeInTheDocument();
+    expect(within(dialog).getByText('FIVE')).toBeInTheDocument();
+    expect(within(dialog).getByText('NARR')).toBeInTheDocument();
+    expect(within(dialog).getByText('91/100')).toBeInTheDocument();
+
+    // Closing via Escape preserves unread count
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Notification history' })).toBeNull();
+    });
+    expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('6');
+
+    // Reopen and close via outside click — still 6 unread
+    fireEvent.click(bellBtn);
+    expect(screen.getByRole('dialog', { name: 'Notification history' })).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Notification history' })).toBeNull();
+    });
+    expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('6');
+
+    // Click narrative notification -> marks read (5 unread), closes dropdown, switches to Narratives
+    fireEvent.click(bellBtn);
+    const dialog2 = screen.getByRole('dialog', { name: 'Notification history' });
+    fireEvent.click(within(dialog2).getByText('NARR'));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Notification history' })).toBeNull();
+    });
+    expect(screen.getByRole('tab', { name: /Narratives/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('5');
+
+    // Click ping notification -> marks read (4 unread), closes dropdown, switches to Ping
+    fireEvent.click(bellBtn);
+    const dialog3 = screen.getByRole('dialog', { name: 'Notification history' });
+    fireEvent.click(within(dialog3).getByText('FIVE'));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Notification history' })).toBeNull();
+    });
+    expect(screen.getByRole('tab', { name: /Ping/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('4');
+
+    // Mark all read -> clears badge, keeps items
+    fireEvent.click(bellBtn);
+    const dialog4 = screen.getByRole('dialog', { name: 'Notification history' });
+    fireEvent.click(within(dialog4).getByRole('button', { name: 'Mark all read' }));
+    expect(screen.queryByTestId('notification-unread-badge')).toBeNull();
+    expect(within(dialog4).getByText('ONE')).toBeInTheDocument();
+
+    // Clear -> empties list and shows empty state
+    fireEvent.click(within(dialog4).getByRole('button', { name: 'Clear' }));
+    expect(within(dialog4).getByText('No notifications yet.')).toBeInTheDocument();
+    expect(within(dialog4).queryByText('ONE')).toBeNull();
+  });
+
+  it('NotificationBell retains auto-dismissed (30s) toasts', async () => {
+    vi.useFakeTimers();
+    try {
+      let poll = 0;
+      globalThis.fetch = mockFetch({
+        ping: () =>
+          poll === 0
+            ? { alerts: [], wallets: [] }
+            : {
+                alerts: [
+                  {
+                    ts: 1700000300,
+                    kind: 'exit_wallet',
+                    mint: addr('A'),
+                    wallet: addr('W'),
+                    symbol: 'RETAINED',
+                    detail: { usd: 420 },
+                  },
+                ],
+                wallets: [],
+              },
+      });
+
+      render(<App />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      poll = 1;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60000);
+      });
+
+      expect(screen.getByText('RETAINED')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+
+      // Toast is auto-dismissed from PingToaster
+      expect(screen.queryByRole('status')).toBeNull();
+      expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('1');
+
+      // Still present in NotificationBell dropdown
+      fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+      const dialog = screen.getByRole('dialog', { name: 'Notification history' });
+      expect(within(dialog).getByText('RETAINED')).toBeInTheDocument();
+      expect(within(dialog).getByText('$420')).toBeInTheDocument();
+    } finally {
+      cleanup();
+      await vi.advanceTimersByTimeAsync(200);
+      vi.useRealTimers();
+    }
+  });
+
+  it('NotificationBell persists history and read state in localStorage across remounts, capped at 50', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const alerts = Array.from({ length: 55 }, (_, i) => ({
+      ts: nowSec - i,
+      kind: 'buy',
+      mint: addr(String.fromCharCode(65 + (i % 26)) + i),
+      symbol: `TOK${i}`,
+      detail: { usd: 200 + i },
+    }));
+
+    globalThis.fetch = mockFetch({
+      ping: () => ({ alerts, wallets: [] }),
+    });
+
+    const firstRender = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('50');
+    });
+
+    // Mark TOK0 as read before unmounting
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    const dialog1 = screen.getByRole('dialog', { name: 'Notification history' });
+    expect(within(dialog1).getByText('TOK0')).toBeInTheDocument();
+    expect(within(dialog1).getByText('TOK49')).toBeInTheDocument();
+    expect(within(dialog1).queryByText('TOK50')).toBeNull();
+
+    fireEvent.click(within(dialog1).getByText('TOK0'));
+    await waitFor(() => {
+      expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('49');
+    });
+
+    firstRender.unmount();
+
+    // Remount with empty poll responses -> history & read state come from localStorage
+    globalThis.fetch = mockFetch({});
+    render(<App />);
+
+    expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('49');
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    const dialog2 = screen.getByRole('dialog', { name: 'Notification history' });
+    expect(within(dialog2).getByText('TOK0').closest('button')).toHaveAttribute('data-read', 'true');
+    expect(within(dialog2).getByText('TOK1').closest('button')).toHaveAttribute('data-read', 'false');
+    expect(within(dialog2).queryByText('TOK50')).toBeNull();
+  });
 });

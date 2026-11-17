@@ -25,8 +25,57 @@ const RECENT_ALERT_WINDOW_SEC = 300;
 const SEEN_ALERTS_STORAGE_KEY = 'cheesequake:seen-ping-alerts';
 const SEEN_NARRATIVE_BANDS_STORAGE_KEY = 'cheesequake:seen-narrative-bands';
 const ACTIVE_TAB_STORAGE_KEY = 'cheesequake:tab-state:active-tab';
+const NOTIFICATION_HISTORY_STORAGE_KEY = 'cheesequake:notification-history';
+const MAX_NOTIFICATION_HISTORY = 50;
 const VALID_TABS = new Set<TabId>(['market', 'watch', 'ping', 'narratives', 'tracer']);
 const NOTIFIABLE_BANDS = new Set(['strong', 'confirm', 'neutral']);
+
+export interface NotificationItem {
+  toast: PingToast;
+  createdAt: number;
+  read: boolean;
+}
+
+function isValidNotificationItem(value: unknown): value is NotificationItem {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const item = value as Record<string, unknown>;
+  if (typeof item.createdAt !== 'number' || !Number.isFinite(item.createdAt)) {
+    return false;
+  }
+  if (typeof item.read !== 'boolean') {
+    return false;
+  }
+  if (typeof item.toast !== 'object' || item.toast === null || Array.isArray(item.toast)) {
+    return false;
+  }
+  const toast = item.toast as Record<string, unknown>;
+  if (typeof toast.id !== 'string' || !toast.id) {
+    return false;
+  }
+  if (toast.kind === 'ping') {
+    return typeof toast.alert === 'object' && toast.alert !== null;
+  }
+  if (toast.kind === 'narrative') {
+    return typeof toast.coin === 'object' && toast.coin !== null;
+  }
+  return false;
+}
+
+function deserializeNotificationHistory(raw: unknown): NotificationItem[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const valid: NotificationItem[] = [];
+  for (const entry of raw) {
+    if (!isValidNotificationItem(entry)) continue;
+    if (seen.has(entry.toast.id)) continue;
+    seen.add(entry.toast.id);
+    valid.push(entry);
+    if (valid.length >= MAX_NOTIFICATION_HISTORY) break;
+  }
+  return valid;
+}
 
 type DomainScope = TabId;
 type DomainTicks = Record<DomainScope, number>;
@@ -115,6 +164,11 @@ export default function App() {
     });
   }, []);
   const [toasts, setToasts] = useState<PingToast[]>([]);
+  const [notifications, setNotifications] = usePersistedState<NotificationItem[]>(
+    NOTIFICATION_HISTORY_STORAGE_KEY,
+    [],
+    { deserialize: deserializeNotificationHistory },
+  );
   const watchHydratedRef = useRef(false);
   const pingHydratedRef = useRef(false);
   const seenAlertsRef = useRef<Set<string> | null>(null);
@@ -130,9 +184,50 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const markNotificationRead = useCallback(
+    (id: string) => {
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.toast.id === id && !item.read ? { ...item, read: true } : item,
+        ),
+      );
+    },
+    [setNotifications],
+  );
+
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications((prev) =>
+      prev.some((item) => !item.read)
+        ? prev.map((item) => (item.read ? item : { ...item, read: true }))
+        : prev,
+    );
+  }, [setNotifications]);
+
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+  }, [setNotifications]);
+
   const enqueueToasts = useCallback(
     (fresh: PingToast[]) => {
       if (fresh.length === 0) return;
+
+      const now = Date.now();
+      setNotifications((prev) => {
+        const seen = new Set<string>();
+        const next: NotificationItem[] = [];
+        for (const toast of fresh) {
+          if (seen.has(toast.id)) continue;
+          seen.add(toast.id);
+          next.push({ toast, createdAt: now, read: false });
+        }
+        for (const item of prev) {
+          if (seen.has(item.toast.id)) continue;
+          seen.add(item.toast.id);
+          next.push(item);
+          if (next.length >= MAX_NOTIFICATION_HISTORY) break;
+        }
+        return next.slice(0, MAX_NOTIFICATION_HISTORY);
+      });
 
       for (const toast of fresh) {
         const existing = toastTimersRef.current.get(toast.id);
@@ -157,15 +252,23 @@ export default function App() {
         return merged.slice(merged.length - MAX_VISIBLE_TOASTS);
       });
     },
-    [dismissToast],
+    [dismissToast, setNotifications],
   );
 
   const openFromToast = useCallback(
     (toast: PingToast) => {
       setActiveTab(toast.kind === 'narrative' ? 'narratives' : 'ping');
+      markNotificationRead(toast.id);
       dismissToast(toast.id);
     },
-    [dismissToast],
+    [dismissToast, markNotificationRead, setActiveTab],
+  );
+
+  const openFromNotification = useCallback(
+    (item: NotificationItem) => {
+      openFromToast(item.toast);
+    },
+    [openFromToast],
   );
 
   useEffect(() => {
@@ -369,6 +472,10 @@ export default function App() {
         refreshing={refreshing}
         onRefresh={triggerRefresh}
         liveStatus={liveStatus}
+        notifications={notifications}
+        onOpenNotification={openFromNotification}
+        onMarkAllNotificationsRead={markAllNotificationsRead}
+        onClearNotifications={clearNotifications}
       >
         {activeTab !== 'watch' && (
           <motion.div
