@@ -62,6 +62,7 @@ describe('Cheesequake UI', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -1084,5 +1085,227 @@ describe('Cheesequake UI', () => {
     });
     expect(within(toaster).getAllByRole('status')).toHaveLength(1);
     expect(within(toaster).queryByText('PRMS')).toBeNull();
+  });
+
+  it('persists Ping filters, Watch inputs/charts, Narratives toggles, and Tracer graph selection across tab switches', async () => {
+    const walletA = addr('W');
+    const walletB = addr('X');
+    const mintWatch = addr('M');
+    const mintNar = addr('N');
+    const pingCalls: string[] = [];
+
+    globalThis.fetch = mockFetch({
+      watch: () => ({
+        ok: true,
+        coins: [
+          {
+            mint: mintWatch,
+            symbol: 'WTC',
+            name: 'Watch Coin',
+            pool: addr('P'),
+            status: 'safe',
+            label: 'Safe to hold',
+            score: 80,
+            price_usd: 0.01,
+            mcap_usd: 50000,
+            liquidity_usd: 20000,
+            vol_h24: 10000,
+            image_url: null,
+            reasons: ['Safe'],
+            alerts: [],
+          },
+        ],
+      }),
+      ping: (url) => {
+        pingCalls.push(url);
+        return {
+          alerts: [
+            {
+              ts: 1700000000,
+              kind: 'buy',
+              mint: mintWatch,
+              symbol: 'WTC',
+              wallet: walletA,
+              wallet_label: 'alice',
+              detail: { usd: 200 },
+            },
+          ],
+          wallets: [{ address: walletA, label: 'alice' }],
+        };
+      },
+      narratives: () => ({
+        running: [
+          {
+            mint: mintNar,
+            symbol: 'NRT',
+            theme: 'ai',
+            score: 75,
+            band: 'confirm',
+            mcap_usd: 80000,
+            reasons: [{ part: 'health', points: 20, max: 25 }],
+            unknowns: [],
+          },
+        ],
+        themes: Array.from({ length: 7 }, (_, i) => ({
+          keyword: `theme${i}`,
+          tokens: 2,
+          volume: 1000 - i,
+          share: 0.15,
+        })),
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+      tracer: () => ({
+        status: 'done',
+        nodes: [
+          { address: walletA, label: 'Start', depth: 0, type: 'other' },
+          { address: walletB, label: 'Binance', depth: 1, type: 'exchange' },
+        ],
+        edges: [{ from: walletA, to: walletB, usd: 500 }],
+      }),
+    });
+
+    render(<App />);
+
+    // 1. Ping -> Market -> Ping preserves kind and wallet filters and re-fetches with saved params
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Alert kind')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText('Alert kind'), { target: { value: 'buy' } });
+    fireEvent.change(screen.getByLabelText('Wallet'), { target: { value: walletA } });
+    await waitFor(() => {
+      expect(pingCalls.some((u) => u.includes('kind=buy') && u.includes(`wallet=${walletA}`))).toBe(true);
+    });
+
+    pingCalls.length = 0;
+    fireEvent.click(screen.getByRole('tab', { name: /Market/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Market/i })).toHaveAttribute('aria-selected', 'true');
+    });
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Alert kind')).toHaveValue('buy');
+      expect(screen.getByLabelText('Wallet')).toHaveValue(walletA);
+      expect(pingCalls.some((u) => u.includes('kind=buy') && u.includes(`wallet=${walletA}`))).toBe(true);
+    });
+
+    // 2. Watch -> Market -> Watch preserves mintInput and per-mint chartOpen
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Show chart' })).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText('Coin mint address'), {
+      target: { value: 'draft-mint' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Show chart' }));
+    expect(document.querySelector('iframe')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Market/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Coin mint address')).toHaveValue('draft-mint');
+      expect(screen.getByRole('button', { name: 'Hide chart' })).toBeInTheDocument();
+      expect(document.querySelector('iframe')).toBeTruthy();
+    });
+
+    // 3. Narratives -> Market -> Narratives preserves openMints and showAllThemes
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Show all 7 themes' })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 7 themes' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Explain score' })[0]);
+    expect(screen.getByText('theme6')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Hide' }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Market/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    await waitFor(() => {
+      expect(screen.getByText('theme6')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show top 5' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Hide' }).length).toBeGreaterThan(0);
+    });
+
+    // 4. Tracer -> Watch -> Tracer restores input, traceWallet, and selectedAddress
+    fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));
+    fireEvent.change(screen.getByLabelText('Start wallet address'), {
+      target: { value: walletA },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Binance' })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Binance' }));
+    expect(screen.getByText('Hop 1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Start wallet address')).toHaveValue(walletA);
+      expect(screen.getByText('Hop 1')).toBeInTheDocument();
+    });
+  });
+
+  it('restores activeTab and per-tab state across App unmount/remount', async () => {
+    const wallet = addr('T');
+    globalThis.fetch = mockFetch({
+      ping: () => ({
+        alerts: [],
+        wallets: [{ address: wallet, label: 'trader' }],
+      }),
+    });
+
+    const firstRender = render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Alert kind')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText('Alert kind'), { target: { value: 'sell' } });
+    fireEvent.change(screen.getByLabelText('Wallet'), { target: { value: wallet } });
+
+    firstRender.unmount();
+
+    render(<App />);
+    expect(screen.getByRole('tab', { name: /Ping/i })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => {
+      expect(screen.getByLabelText('Alert kind')).toHaveValue('sell');
+      expect(screen.getByLabelText('Wallet')).toHaveValue(wallet);
+    });
+  });
+
+  it('falls back to market and defaults when localStorage contains corrupt JSON or invalid values', async () => {
+    window.localStorage.setItem('cheesequake:tab-state:active-tab', '"not-a-tab"');
+    window.localStorage.setItem('cheesequake:tab-state:ping:kind', '{broken-json');
+    window.localStorage.setItem('cheesequake:tab-state:narratives:open-mints', '12345');
+    window.localStorage.setItem('cheesequake:tab-state:narratives:show-all-themes', '"yes"');
+
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        running: [],
+        themes: Array.from({ length: 6 }, (_, i) => ({
+          keyword: `kw${i}`,
+          tokens: 1,
+          volume: 100,
+          share: 0.1,
+        })),
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+    });
+
+    render(<App />);
+
+    expect(screen.getByRole('tab', { name: /Market/i })).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Alert kind')).toHaveValue('');
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Show all 6 themes' })).toBeInTheDocument();
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from './components/Layout';
 import { PingToaster, type PingToast } from './components/PingToaster';
+import { usePersistedState } from './lib/tabState';
 import { Market } from './pages/Market';
 import { Narratives } from './pages/Narratives';
 import { Ping } from './pages/Ping';
@@ -21,7 +22,13 @@ const MAX_SEEN_KEYS = 1000;
 const RECENT_ALERT_WINDOW_SEC = 300;
 const SEEN_ALERTS_STORAGE_KEY = 'cheesequake:seen-ping-alerts';
 const SEEN_NARRATIVE_BANDS_STORAGE_KEY = 'cheesequake:seen-narrative-bands';
+const ACTIVE_TAB_STORAGE_KEY = 'cheesequake:tab-state:active-tab';
+const VALID_TABS = new Set<TabId>(['market', 'watch', 'ping', 'narratives', 'tracer']);
 const NOTIFIABLE_BANDS = new Set(['strong', 'confirm', 'neutral']);
+
+function isValidTabId(value: unknown): value is TabId {
+  return typeof value === 'string' && VALID_TABS.has(value as TabId);
+}
 
 function getAlertKey(a: AlertItem): string {
   return `${a.ts}:${a.kind}:${a.mint}:${a.wallet ?? ''}:${a.detail?.usd ?? ''}`;
@@ -61,7 +68,11 @@ function trimSeenKeys(seen: Set<string>): boolean {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('market');
+  const [activeTab, setActiveTab] = usePersistedState<TabId>(
+    ACTIVE_TAB_STORAGE_KEY,
+    'market',
+    { validate: isValidTabId },
+  );
   const [watchedSet, setWatchedSet] = useState<Set<string>>(() => new Set());
   const [refreshTick, setRefreshTick] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);

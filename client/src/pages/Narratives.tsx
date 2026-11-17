@@ -10,7 +10,16 @@ import {
 } from '../components/ui';
 import { fmt } from '../lib/format';
 import { PARTS, bandInfo, explainPart, missingList } from '../lib/glossary';
+import {
+  isBoolean,
+  stringSetPersistence,
+  usePersistedState,
+} from '../lib/tabState';
 import type { NarrativesResponse } from '../types';
+
+const NARRATIVES_OPEN_MINTS_KEY = 'cheesequake:tab-state:narratives:open-mints';
+const NARRATIVES_SHOW_ALL_THEMES_KEY =
+  'cheesequake:tab-state:narratives:show-all-themes';
 
 export function Narratives({
   refreshTick,
@@ -23,8 +32,16 @@ export function Narratives({
 }) {
   const [data, setData] = useState<NarrativesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openMints, setOpenMints] = useState<Set<string>>(() => new Set());
-  const [showAllThemes, setShowAllThemes] = useState(false);
+  const [openMints, setOpenMints] = usePersistedState<Set<string>>(
+    NARRATIVES_OPEN_MINTS_KEY,
+    () => new Set(),
+    stringSetPersistence,
+  );
+  const [showAllThemes, setShowAllThemes] = usePersistedState<boolean>(
+    NARRATIVES_SHOW_ALL_THEMES_KEY,
+    false,
+    { validate: isBoolean },
+  );
 
   useEffect(() => {
     let active = true;

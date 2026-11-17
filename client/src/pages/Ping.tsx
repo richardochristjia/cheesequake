@@ -9,7 +9,11 @@ import {
 import { EmptyState } from '../components/EmptyState';
 import { KindTooltip } from '../components/KindTooltip';
 import { formatAlertDetail, short, when } from '../lib/format';
+import { isString, usePersistedState } from '../lib/tabState';
 import type { PingResponse } from '../types';
+
+const PING_KIND_KEY = 'cheesequake:tab-state:ping:kind';
+const PING_WALLET_KEY = 'cheesequake:tab-state:ping:wallet';
 
 const KINDS = [
   { value: '', label: 'all' },
@@ -18,6 +22,12 @@ const KINDS = [
   { value: 'consensus', label: 'consensus' },
   { value: 'exit', label: 'exit' },
 ];
+
+const VALID_KINDS = new Set(KINDS.map((k) => k.value));
+
+function isValidKind(value: unknown): value is string {
+  return typeof value === 'string' && VALID_KINDS.has(value);
+}
 
 export function Ping({
   refreshTick,
@@ -28,8 +38,12 @@ export function Ping({
   watchedSet: Set<string>;
   onToggleWatch: (mint: string) => void;
 }) {
-  const [kind, setKind] = useState('');
-  const [wallet, setWallet] = useState('');
+  const [kind, setKind] = usePersistedState<string>(PING_KIND_KEY, '', {
+    validate: isValidKind,
+  });
+  const [wallet, setWallet] = usePersistedState<string>(PING_WALLET_KEY, '', {
+    validate: isString,
+  });
   const [data, setData] = useState<PingResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
