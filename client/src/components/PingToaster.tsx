@@ -1,6 +1,8 @@
 import { X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { fmt, short, type Tone } from '../lib/format';
 import { bandInfo } from '../lib/glossary';
+import { SNAPPY_SPRING, toastVariants } from '../lib/motion';
 import type { AlertItem, RunningCoin } from '../types';
 
 export type PingToast =
@@ -102,38 +104,44 @@ export function PingToaster({
   onDismiss: (id: string) => void;
   onOpenToast: (toast: PingToast) => void;
 }) {
-  if (toasts.length === 0) return null;
-
   return (
     <div
       aria-live="polite"
       aria-label="Ping notifications"
       className="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 pointer-events-none"
     >
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          role="status"
-          className="pointer-events-auto relative flex items-start gap-2 rounded-xl border border-[#e59a28]/35 bg-[#211c16]/95 p-3 text-[#f4ede2] shadow-[0_14px_36px_rgba(4,3,2,0.75)] backdrop-blur-md transition-colors hover:border-[#e59a28]/70"
-        >
-          <button
-            type="button"
-            onClick={() => onOpenToast(toast)}
-            className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline-none"
+      <AnimatePresence initial={false}>
+        {toasts.map((toast) => (
+          <motion.div
+            key={toast.id}
+            layout
+            variants={toastVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ layout: SNAPPY_SPRING }}
+            role="status"
+            className="pointer-events-auto relative flex items-start gap-2 rounded-xl border border-[#e59a28]/35 bg-[#211c16]/95 p-3 text-[#f4ede2] shadow-[0_14px_36px_rgba(4,3,2,0.75)] backdrop-blur-md transition-colors hover:border-[#e59a28]/70"
           >
-            <ToastBody toast={toast} />
-          </button>
+            <button
+              type="button"
+              onClick={() => onOpenToast(toast)}
+              className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline-none"
+            >
+              <ToastBody toast={toast} />
+            </button>
 
-          <button
-            type="button"
-            aria-label="Dismiss notification"
-            onClick={() => onDismiss(toast.id)}
-            className="shrink-0 rounded-md p-1 text-[#cfc3b4] hover:bg-[#2d251d] hover:text-[#f4ede2] cursor-pointer"
-          >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      ))}
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => onDismiss(toast.id)}
+              className="shrink-0 rounded-md p-1 text-[#cfc3b4] hover:bg-[#2d251d] hover:text-[#f4ede2] cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

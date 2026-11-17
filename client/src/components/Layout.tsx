@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { motion } from 'motion/react';
 import {
   Activity,
   Bell,
@@ -7,6 +8,7 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
+import { BUTTON_TAP, SNAPPY_SPRING } from '../lib/motion';
 import type { TabId } from '../types';
 import { Logo } from './Logo';
 
@@ -168,11 +170,14 @@ export function Layout({
                 Updated {lastUpdated.toLocaleTimeString()}
               </span>
             )}
-            <button
+            <motion.button
               type="button"
               onClick={onRefresh}
               disabled={refreshing}
               aria-label="Refresh now"
+              whileTap={refreshing ? undefined : BUTTON_TAP}
+              whileHover={refreshing ? undefined : { y: -0.5 }}
+              transition={SNAPPY_SPRING}
               className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-[#f4ede2]/15 bg-[#211c16]/80 px-3 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#e59a28]/50 transition-colors cursor-pointer disabled:opacity-60"
             >
               <RefreshCw
@@ -180,7 +185,7 @@ export function Layout({
                 aria-hidden="true"
               />
               Refresh
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -192,16 +197,18 @@ export function Layout({
           {TABS.map(({ id, label, icon: Icon }) => {
             const selected = activeTab === id;
             return (
-              <button
+              <motion.button
                 key={id}
                 type="button"
                 role="tab"
                 aria-selected={selected}
                 onClick={() => onTabChange(id)}
-                className={`inline-flex shrink-0 min-h-[44px] items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
+                whileTap={BUTTON_TAP}
+                transition={SNAPPY_SPRING}
+                className={`relative inline-flex shrink-0 min-h-[44px] items-center gap-2 border-b-2 border-transparent px-3.5 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
                   selected
-                    ? 'border-[#e59a28] text-[#f4ede2]'
-                    : 'border-transparent text-[#cfc3b4] hover:text-[#f4ede2]'
+                    ? 'text-[#f4ede2]'
+                    : 'text-[#cfc3b4] hover:text-[#f4ede2]'
                 }`}
               >
                 <Icon
@@ -209,7 +216,15 @@ export function Layout({
                   aria-hidden="true"
                 />
                 {label}
-              </button>
+                {selected && (
+                  <motion.span
+                    layoutId="active-tab-indicator"
+                    aria-hidden="true"
+                    transition={SNAPPY_SPRING}
+                    className="pointer-events-none absolute inset-x-0 -bottom-[2px] h-0.5 bg-[#e59a28]"
+                  />
+                )}
+              </motion.button>
             );
           })}
         </nav>
