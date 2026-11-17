@@ -989,4 +989,100 @@ describe('Cheesequake UI', () => {
     expect(screen.getByRole('heading', { name: 'Cheesequake' })).toBeInTheDocument();
     expect(screen.getByText(/Research tool\. Not trading advice\./)).toBeInTheDocument();
   });
+
+  it('PingToaster renders narrative toasts for strong, confirm, and neutral bands, ignores risk/avoid, deduplicates across refreshes, and navigates to Narratives on click', async () => {
+    const mStrong = addr('S');
+    const mConfirm = addr('C');
+    const mNeutral = addr('N');
+    const mRisk = addr('R');
+    const mAvoid = addr('V');
+
+    const makeCoin = (
+      mint: string,
+      symbol: string | null,
+      band: string,
+      score: number,
+    ) => ({
+      mint,
+      symbol,
+      name: symbol || 'Unnamed',
+      theme: 'ai-agents',
+      score,
+      band,
+      mcap_usd: 150000,
+      unknowns: [],
+      reasons: [],
+    });
+
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        themes: [],
+        running: [
+          makeCoin(mStrong, 'STRG', 'strong', 88),
+          makeCoin(mConfirm, 'PRMS', 'confirm', 72),
+          makeCoin(mNeutral, null, 'neutral', 54),
+          makeCoin(mRisk, 'RISKY', 'risk', 35),
+          makeCoin(mAvoid, 'AVOID', 'avoid', 12),
+        ],
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('status')).toHaveLength(3);
+    });
+
+    const toaster = screen.getByLabelText('Ping notifications');
+    expect(within(toaster).getByText('Strong')).toBeInTheDocument();
+    expect(within(toaster).getByText('STRG')).toBeInTheDocument();
+    expect(within(toaster).getByText('88/100')).toBeInTheDocument();
+
+    expect(within(toaster).getByText('Promising')).toBeInTheDocument();
+    expect(within(toaster).getByText('PRMS')).toBeInTheDocument();
+    expect(within(toaster).getByText('72/100')).toBeInTheDocument();
+
+    expect(within(toaster).getByText('Mixed')).toBeInTheDocument();
+    expect(within(toaster).getByText(`${mNeutral.slice(0, 4)}…${mNeutral.slice(-4)}`)).toBeInTheDocument();
+    expect(within(toaster).getByText('54/100')).toBeInTheDocument();
+
+    expect(within(toaster).queryByText('RISKY')).toBeNull();
+    expect(within(toaster).queryByText('AVOID')).toBeNull();
+
+    // Dismiss the first toast without changing tabs
+    const dismissButtons = within(toaster).getAllByRole('button', {
+      name: 'Dismiss notification',
+    });
+    fireEvent.click(dismissButtons[0]);
+    expect(within(toaster).getAllByRole('status')).toHaveLength(2);
+    expect(within(toaster).queryByText('STRG')).toBeNull();
+    expect(screen.getByRole('tab', { name: /Market/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    // Repeated refresh with the same coins does not duplicate toasts
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Refresh now' })).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/narratives');
+    });
+    expect(within(toaster).getAllByRole('status')).toHaveLength(2);
+    expect(within(toaster).queryByText('STRG')).toBeNull();
+
+    // Clicking a narrative toast switches to Narratives tab and dismisses it
+    fireEvent.click(within(toaster).getByText('PRMS'));
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Narratives/i })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    });
+    expect(within(toaster).getAllByRole('status')).toHaveLength(1);
+    expect(within(toaster).queryByText('PRMS')).toBeNull();
+  });
 });
