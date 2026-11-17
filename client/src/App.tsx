@@ -316,10 +316,7 @@ export default function App() {
   }, [bumpTicks]);
 
   useEffect(() => {
-    if (typeof EventSource === 'undefined') {
-      setLiveStatus('reconnecting');
-      return;
-    }
+    if (typeof EventSource === 'undefined') return;
 
     const es = new EventSource('/api/events');
     es.onopen = () => {
@@ -328,14 +325,13 @@ export default function App() {
     const handleUpdate = (e: MessageEvent) => {
       try {
         const parsed = JSON.parse(String(e.data)) as { scopes?: unknown };
-        if (Array.isArray(parsed?.scopes)) {
-          const valid = parsed.scopes.filter(
-            (s): s is DomainScope => typeof s === 'string' && VALID_SCOPES.has(s),
-          );
-          if (valid.length > 0) {
-            bumpTicks(valid);
-            setLastUpdated(new Date());
-          }
+        if (!Array.isArray(parsed?.scopes)) return;
+        const valid = parsed.scopes.filter(
+          (s): s is DomainScope => typeof s === 'string' && VALID_SCOPES.has(s),
+        );
+        if (valid.length > 0) {
+          bumpTicks(valid);
+          setLastUpdated(new Date());
         }
       } catch {
         // Ignore malformed SSE payloads.
