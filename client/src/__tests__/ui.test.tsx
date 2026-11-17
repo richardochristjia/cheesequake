@@ -2011,4 +2011,101 @@ describe('Cheesequake UI', () => {
     expect(within(dialog2).getByText('TOK1').closest('button')).toHaveAttribute('data-read', 'false');
     expect(within(dialog2).queryByText('TOK50')).toBeNull();
   });
+
+  it('NotificationBell preserves read state when sessionStorage is cleared and the same narrative poll arrives on remount', async () => {
+    const mint = addr('R');
+    let narrativeFetches = 0;
+    globalThis.fetch = mockFetch({
+      narratives: () => {
+        narrativeFetches += 1;
+        return {
+          themes: [],
+          running: [
+            {
+              mint,
+              symbol: 'READOK',
+              name: 'Read OK',
+              theme: 'ai-agents',
+              score: 86,
+              band: 'strong',
+              mcap_usd: 150000,
+              unknowns: [],
+              reasons: [],
+            },
+          ],
+          watchlist: [],
+          wallets: [],
+          calibration: { rows: [], missed: 0 },
+        };
+      },
+    });
+
+    const firstRender = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('1');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    const dialog1 = screen.getByRole('dialog', { name: 'Notification history' });
+    fireEvent.click(within(dialog1).getByText('READOK'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('notification-unread-badge')).toBeNull();
+    });
+
+    firstRender.unmount();
+    window.sessionStorage.clear();
+    const fetchesBeforeRemount = narrativeFetches;
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(narrativeFetches).toBeGreaterThan(fetchesBeforeRemount);
+    });
+
+    // Wait for enqueueToasts to process the poll response and verify read state is preserved
+    await waitFor(() => {
+      expect(screen.queryByTestId('notification-unread-badge')).toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    const dialog2 = screen.getByRole('dialog', { name: 'Notification history' });
+    expect(within(dialog2).getByText('READOK').closest('button')).toHaveAttribute('data-read', 'true');
+  });
+
+  it('NotificationBell drops malformed localStorage entries missing required alert or coin fields without crashing', async () => {
+    window.localStorage.setItem(
+      'cheesequake:notification-history',
+      JSON.stringify([
+        { toast: { id: 'bad-ping', kind: 'ping', alert: {} }, createdAt: Date.now(), read: false },
+        { toast: { id: 'bad-narrative', kind: 'narrative', coin: {} }, createdAt: Date.now(), read: false },
+        { toast: { id: 'bad-array', kind: 'ping', alert: [] }, createdAt: Date.now(), read: false },
+        {
+          toast: {
+            id: 'good-ping',
+            kind: 'ping',
+            alert: {
+              ts: Math.floor(Date.now() / 1000),
+              kind: 'buy',
+              mint: addr('G'),
+              symbol: 'GOOD',
+              detail: { usd: 150 },
+            },
+          },
+          createdAt: Date.now(),
+          read: false,
+        },
+      ]),
+    );
+
+    globalThis.fetch = mockFetch({});
+    render(<App />);
+
+    expect(screen.getByTestId('notification-unread-badge')).toHaveTextContent('1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    const dialog = screen.getByRole('dialog', { name: 'Notification history' });
+    expect(within(dialog).getByText('GOOD')).toBeInTheDocument();
+  });
 });
