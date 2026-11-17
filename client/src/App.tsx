@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MotionConfig } from 'motion/react';
+import { MotionConfig, motion } from 'motion/react';
 import { Layout } from './components/Layout';
 import { PingToaster, type PingToast } from './components/PingToaster';
+import { tabPanelVariants } from './lib/motion';
 import { usePersistedState } from './lib/tabState';
 import { Market } from './pages/Market';
 import { Narratives } from './pages/Narratives';
@@ -369,27 +370,42 @@ export default function App() {
         onRefresh={triggerRefresh}
         liveStatus={liveStatus}
       >
-        {activeTab === 'market' && <Market refreshTick={ticks.market} />}
+        {activeTab !== 'watch' && (
+          <motion.div
+            key={activeTab}
+            variants={tabPanelVariants}
+            initial="initial"
+            animate="animate"
+          >
+            {activeTab === 'market' && <Market refreshTick={ticks.market} />}
+            {activeTab === 'ping' && (
+              <Ping
+                refreshTick={ticks.ping}
+                watchedSet={watchedSet}
+                onToggleWatch={toggleWatch}
+              />
+            )}
+            {activeTab === 'narratives' && (
+              <Narratives
+                refreshTick={ticks.narratives}
+                watchedSet={watchedSet}
+                onToggleWatch={toggleWatch}
+              />
+            )}
+            {activeTab === 'tracer' && <Tracer refreshTick={ticks.tracer} />}
+          </motion.div>
+        )}
         {watchVisited && (
           <div role="tabpanel" hidden={activeTab !== 'watch'}>
-            <Watch refreshTick={ticks.watch} onSyncWatched={syncWatched} />
+            <motion.div
+              variants={tabPanelVariants}
+              initial="initial"
+              animate={activeTab === 'watch' ? 'animate' : 'initial'}
+            >
+              <Watch refreshTick={ticks.watch} onSyncWatched={syncWatched} />
+            </motion.div>
           </div>
         )}
-        {activeTab === 'ping' && (
-          <Ping
-            refreshTick={ticks.ping}
-            watchedSet={watchedSet}
-            onToggleWatch={toggleWatch}
-          />
-        )}
-        {activeTab === 'narratives' && (
-          <Narratives
-            refreshTick={ticks.narratives}
-            watchedSet={watchedSet}
-            onToggleWatch={toggleWatch}
-          />
-        )}
-        {activeTab === 'tracer' && <Tracer refreshTick={ticks.tracer} />}
       </Layout>
       <PingToaster
         toasts={toasts}

@@ -872,7 +872,9 @@ describe('Cheesequake UI', () => {
       name: 'Dismiss notification',
     });
     fireEvent.click(dismissButtons[0]);
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    await waitFor(() => {
+      expect(screen.getAllByRole('status')).toHaveLength(1);
+    });
     expect(screen.getByRole('tab', { name: /Market/i })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -885,8 +887,8 @@ describe('Cheesequake UI', () => {
         'aria-selected',
         'true',
       );
+      expect(screen.queryByRole('status')).toBeNull();
     });
-    expect(screen.queryByRole('status')).toBeNull();
 
     // Repeated poll with already-seen alerts does not duplicate toasts
     poll = 2;
@@ -954,7 +956,9 @@ describe('Cheesequake UI', () => {
 
     // Dismiss the toast, unmount, and remount: sessionStorage prevents re-toasting
     fireEvent.click(within(toaster).getByRole('button', { name: 'Dismiss notification' }));
-    expect(screen.queryByRole('status')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).toBeNull();
+    });
     firstRender.unmount();
 
     render(<App />);
@@ -1009,10 +1013,15 @@ describe('Cheesequake UI', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
 
       expect(screen.queryByText('AUTO')).toBeNull();
       expect(screen.queryByRole('status')).toBeNull();
     } finally {
+      cleanup();
+      await vi.advanceTimersByTimeAsync(200);
       vi.useRealTimers();
     }
   });
@@ -1107,8 +1116,10 @@ describe('Cheesequake UI', () => {
       name: 'Dismiss notification',
     });
     fireEvent.click(dismissButtons[0]);
-    expect(within(toaster).getAllByRole('status')).toHaveLength(2);
-    expect(within(toaster).queryByText('STRG')).toBeNull();
+    await waitFor(() => {
+      expect(within(toaster).getAllByRole('status')).toHaveLength(2);
+      expect(within(toaster).queryByText('STRG')).toBeNull();
+    });
     expect(screen.getByRole('tab', { name: /Market/i })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -1132,9 +1143,9 @@ describe('Cheesequake UI', () => {
         'aria-selected',
         'true',
       );
+      expect(within(toaster).getAllByRole('status')).toHaveLength(1);
+      expect(within(toaster).queryByText('PRMS')).toBeNull();
     });
-    expect(within(toaster).getAllByRole('status')).toHaveLength(1);
-    expect(within(toaster).queryByText('PRMS')).toBeNull();
   });
 
   it('persists Ping filters, Watch inputs/charts, Narratives toggles, and Tracer graph selection across tab switches', async () => {
