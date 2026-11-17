@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within, cleanup, act } from '@testi
 import App from '../App';
 import { Layout } from '../components/Layout';
 import { KindTooltip } from '../components/KindTooltip';
+import { WatchButton } from '../components/ui';
 import { KIND_INFO, PARTS, BANDS, UNKNOWNS, explainPart } from '../lib/glossary';
 import type { WatchCoin } from '../types';
 
@@ -1497,5 +1498,166 @@ describe('Cheesequake UI', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('CTA and action buttons render aria-hidden icons, preserve accessible names, and keep stable toggle layout classes', async () => {
+    const assertIconAndLayout = (
+      btn: HTMLElement,
+      requiredClasses: string[],
+    ) => {
+      const svg = btn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg).toHaveAttribute('aria-hidden', 'true');
+      for (const cls of requiredClasses) {
+        expect(btn.className).toContain(cls);
+      }
+    };
+
+    // 1. WatchButton (Watch <-> Watching)
+    const mint = addr('M');
+    const onToggle = vi.fn();
+    const { rerender, unmount } = render(
+      <WatchButton mint={mint} watched={false} onToggle={onToggle} />,
+    );
+    const watchBtn = screen.getByRole('button', { name: 'Watch' });
+    assertIconAndLayout(watchBtn, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+      'min-w-[100px]',
+    ]);
+    rerender(<WatchButton mint={mint} watched={true} onToggle={onToggle} />);
+    const watchingBtn = screen.getByRole('button', { name: 'Watching' });
+    assertIconAndLayout(watchingBtn, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+      'min-w-[100px]',
+    ]);
+    unmount();
+
+    // 2. App-level CTAs across Narratives, Watch, and Tracer
+    const themes = Array.from({ length: 6 }, (_, i) => ({
+      keyword: `theme${i + 1}`,
+      tokens: 10 - i,
+      volume: 100000,
+      share: 0.2,
+    }));
+    const watchCoin: WatchCoin = {
+      mint,
+      symbol: 'TST',
+      name: 'TestCoin',
+      pool: null,
+      status: 'safe',
+      score: 80,
+      price_usd: 0.001,
+      mcap_usd: 50000,
+      liquidity_usd: 10000,
+      vol_h24: 25000,
+      image_url: null,
+      reasons: ['Healthy flow'],
+      alerts: [],
+    };
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        running: [
+          {
+            mint,
+            name: 'TestCoin',
+            symbol: 'TST',
+            theme: 'theme1',
+            score: 80,
+            band: 'strong',
+            mcap_usd: 50000,
+            unknowns: [],
+            reasons: [{ part: 'flow', points: 20, max: 25 }],
+          },
+        ],
+        themes,
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+      watch: () => ({ ok: true, coins: [watchCoin] }),
+    });
+
+    render(<App />);
+
+    // Narratives tab
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    const explainBtns = await screen.findAllByRole('button', {
+      name: 'Explain score',
+    });
+    expect(explainBtns.length).toBeGreaterThanOrEqual(2);
+    for (const btn of explainBtns) {
+      assertIconAndLayout(btn, [
+        'inline-flex',
+        'whitespace-nowrap',
+        'shrink-0',
+        'min-w-[124px]',
+      ]);
+    }
+    fireEvent.click(explainBtns[0]);
+    const hideBtns = screen.getAllByRole('button', { name: 'Hide' });
+    for (const btn of hideBtns) {
+      assertIconAndLayout(btn, [
+        'inline-flex',
+        'whitespace-nowrap',
+        'shrink-0',
+        'min-w-[124px]',
+      ]);
+    }
+
+    const showAllThemesBtn = screen.getByRole('button', {
+      name: 'Show all 6 themes',
+    });
+    assertIconAndLayout(showAllThemesBtn, ['inline-flex']);
+    fireEvent.click(showAllThemesBtn);
+    const showTop5Btn = screen.getByRole('button', { name: 'Show top 5' });
+    assertIconAndLayout(showTop5Btn, ['inline-flex']);
+
+    // Watch tab
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+    const watchCoinSubmit = await screen.findByRole('button', {
+      name: 'Watch coin',
+    });
+    assertIconAndLayout(watchCoinSubmit, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+    ]);
+
+    const showChartBtn = await screen.findByRole('button', {
+      name: 'Show chart',
+    });
+    assertIconAndLayout(showChartBtn, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+      'min-w-[116px]',
+    ]);
+    fireEvent.click(showChartBtn);
+    const hideChartBtn = screen.getByRole('button', { name: 'Hide chart' });
+    assertIconAndLayout(hideChartBtn, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+      'min-w-[116px]',
+    ]);
+
+    const unwatchBtn = screen.getByRole('button', { name: 'Unwatch' });
+    assertIconAndLayout(unwatchBtn, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+    ]);
+
+    // Tracer tab
+    fireEvent.click(screen.getByRole('tab', { name: /Tracer/i }));
+    const traceSubmit = await screen.findByRole('button', { name: 'Trace' });
+    assertIconAndLayout(traceSubmit, [
+      'inline-flex',
+      'whitespace-nowrap',
+      'shrink-0',
+    ]);
   });
 });

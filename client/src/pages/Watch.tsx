@@ -1,10 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   Activity,
+  CandlestickChart,
+  ChevronUp,
   Coins,
   DollarSign,
   Droplets,
   Gauge,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import {
   AddressLink,
@@ -109,19 +113,25 @@ function WatchCard({
             type="button"
             aria-expanded={chartOpen}
             onClick={() => setChartOpen((o) => !o)}
-            className={`min-h-[44px] rounded-lg px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${
+            className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[116px] min-h-[44px] rounded-lg px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer ${
               chartOpen
                 ? 'bg-[#e59a28] text-[#110e0b]'
                 : 'border border-[#2d251d] bg-[#211c16] text-[#f4ede2] hover:border-[#e59a28]/50'
             }`}
           >
+            {chartOpen ? (
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <CandlestickChart className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
             {chartOpen ? 'Hide chart' : 'Show chart'}
           </button>
           <button
             type="button"
             onClick={() => onUnwatch(coin.mint)}
-            className="min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] rounded-lg border border-[#2d251d] bg-[#211c16] px-3.5 py-2 text-xs font-medium text-[#f4ede2] hover:border-[#fb7185]/60 hover:text-[#fb7185] transition-colors cursor-pointer"
           >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             Unwatch
           </button>
         </div>
@@ -290,8 +300,9 @@ export function Watch({
           />
           <button
             type="submit"
-            className="min-h-[44px] rounded-lg bg-[#e59a28] px-4 py-2 text-sm font-medium text-[#110e0b] hover:bg-[#e59a28]/90 transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] rounded-lg bg-[#e59a28] px-4 py-2 text-sm font-medium text-[#110e0b] hover:bg-[#e59a28]/90 transition-colors cursor-pointer"
           >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Watch coin
           </button>
         </form>
