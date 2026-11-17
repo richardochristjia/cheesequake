@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BookmarkCheck, Eye } from 'lucide-react';
+import { motion } from 'motion/react';
 import { B58, short, type Tone } from '../lib/format';
+import { BUTTON_TAP, CARD_HOVER, SNAPPY_SPRING } from '../lib/motion';
 import type { AlertItem } from '../types';
 
 const TONE_CLASSES: Record<Tone, string> = {
@@ -25,15 +27,19 @@ export function Card({
   action,
   children,
   className = '',
+  interactive = false,
 }: {
   title?: ReactNode;
   subtitle?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  interactive?: boolean;
 }) {
   return (
-    <section
+    <motion.section
+      whileHover={interactive ? CARD_HOVER : undefined}
+      transition={interactive ? SNAPPY_SPRING : undefined}
       className={`glass-card rounded-xl p-4 sm:p-5 ${className}`}
     >
       {(title || action) && (
@@ -54,7 +60,7 @@ export function Card({
         </div>
       )}
       {children}
-    </section>
+    </motion.section>
   );
 }
 
@@ -197,10 +203,13 @@ export function WatchButton({
 }) {
   if (!B58.test(mint || '')) return null;
   return (
-    <button
+    <motion.button
       type="button"
       aria-pressed={watched}
       onClick={() => onToggle(mint)}
+      whileHover={{ scale: 1.02 }}
+      whileTap={BUTTON_TAP}
+      transition={SNAPPY_SPRING}
       className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 min-w-[100px] min-h-[44px] px-3.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
         watched
           ? 'bg-[#e59a28] text-[#110e0b] hover:bg-[#e59a28]/90'
@@ -213,6 +222,6 @@ export function WatchButton({
         <Eye className="h-3.5 w-3.5" aria-hidden="true" />
       )}
       {watched ? 'Watching' : 'Watch'}
-    </button>
+    </motion.button>
   );
 }

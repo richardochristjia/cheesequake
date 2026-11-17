@@ -1,3 +1,6 @@
+import { motion } from 'motion/react';
+import { fadeInVariants } from '../lib/motion';
+
 export function EmptyState({
   title,
   description,
@@ -6,7 +9,12 @@ export function EmptyState({
   description: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+    <motion.div
+      variants={fadeInVariants}
+      initial="initial"
+      animate="animate"
+      className="flex flex-col items-center justify-center py-8 px-4 text-center"
+    >
       <svg
         width="64"
         height="64"
@@ -42,6 +50,6 @@ export function EmptyState({
       </svg>
       <p className="text-sm font-medium text-[#f4ede2]">{title}</p>
       <p className="mt-1 text-xs text-[#cfc3b4] max-w-md">{description}</p>
-    </div>
+    </motion.div>
   );
 }
