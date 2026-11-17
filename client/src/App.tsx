@@ -9,11 +9,34 @@ import { Watch } from './pages/Watch';
 import type { AlertItem, PingResponse, TabId, WatchCoin, WatchResponse } from './types';
 
 const MAX_VISIBLE_TOASTS = 4;
-const TOAST_DURATION_MS = 6000;
+const TOAST_DURATION_MS = 30000;
 const MAX_SEEN_KEYS = 1000;
+const RECENT_ALERT_WINDOW_SEC = 300;
+const SEEN_ALERTS_STORAGE_KEY = 'cheesequake:seen-ping-alerts';
 
 function getAlertKey(a: AlertItem): string {
   return `${a.ts}:${a.kind}:${a.mint}:${a.wallet ?? ''}:${a.detail?.usd ?? ''}`;
+}
+
+function loadSeenAlerts(): Set<string> {
+  try {
+    const raw = window.sessionStorage.getItem(SEEN_ALERTS_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    const keys = parsed.filter((item): item is string => typeof item === 'string');
+    return new Set(keys.slice(-MAX_SEEN_KEYS));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenAlerts(seen: Set<string>): void {
+  try {
+    window.sessionStorage.setItem(SEEN_ALERTS_STORAGE_KEY, JSON.stringify(Array.from(seen)));
+  } catch {
+    // Ignore storage quota or private-mode errors.
+  }
 }
 
 export default function App() {
@@ -25,7 +48,7 @@ export default function App() {
   const [toasts, setToasts] = useState<PingToast[]>([]);
   const watchHydratedRef = useRef(false);
   const pingHydratedRef = useRef(false);
-  const seenAlertsRef = useRef<Set<string>>(new Set());
+  const seenAlertsRef = useRef<Set<string> | null>(null);
   const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismissToast = useCallback((id: string) => {
@@ -64,22 +87,24 @@ export default function App() {
       .then((data) => {
         if (!active) return;
         const alerts = Array.isArray(data?.alerts) ? data.alerts : [];
-        const seen = seenAlertsRef.current;
-
-        if (!pingHydratedRef.current) {
-          for (const a of alerts) {
-            seen.add(getAlertKey(a));
-          }
-          pingHydratedRef.current = true;
-          return;
+        if (!seenAlertsRef.current) {
+          seenAlertsRef.current = loadSeenAlerts();
         }
+        const seen = seenAlertsRef.current;
+        const isInitialLoad = !pingHydratedRef.current;
+        pingHydratedRef.current = true;
+        const recentCutoffSec = Math.floor(Date.now() / 1000) - RECENT_ALERT_WINDOW_SEC;
 
         const fresh: PingToast[] = [];
+        let seenChanged = false;
         for (const a of alerts) {
           const key = getAlertKey(a);
           if (seen.has(key)) continue;
           seen.add(key);
-          if (typeof a.detail?.usd === 'number' && a.detail.usd > 100) {
+          seenChanged = true;
+          const isLargeTrade = typeof a.detail?.usd === 'number' && a.detail.usd > 100;
+          if (!isLargeTrade) continue;
+          if (!isInitialLoad || a.ts >= recentCutoffSec) {
             fresh.push({ id: key, alert: a });
           }
         }
@@ -92,6 +117,11 @@ export default function App() {
             seen.delete(k);
             count++;
           }
+          seenChanged = true;
+        }
+
+        if (seenChanged) {
+          saveSeenAlerts(seen);
         }
 
         if (fresh.length === 0) return;

@@ -61,6 +61,7 @@ function mockFetch(handlers: {
 describe('Cheesequake UI', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -848,7 +849,71 @@ describe('Cheesequake UI', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('PingToaster auto-dismisses toasts after 6 seconds', async () => {
+  it('PingToaster toasts unseen >$100 alerts from the last 5 minutes on initial load and deduplicates across remounts via sessionStorage', async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const m1 = addr('E');
+    const m2 = addr('F');
+    const m3 = addr('G');
+    const w1 = addr('W');
+
+    globalThis.fetch = mockFetch({
+      ping: () => ({
+        alerts: [
+          {
+            ts: nowSec - 60,
+            kind: 'buy',
+            mint: m1,
+            wallet: w1,
+            wallet_label: 'Whale 1',
+            symbol: 'RECENT',
+            detail: { usd: 250 },
+          },
+          {
+            ts: nowSec - 301,
+            kind: 'buy',
+            mint: m2,
+            wallet: w1,
+            wallet_label: 'Whale 1',
+            symbol: 'STALE',
+            detail: { usd: 400 },
+          },
+          {
+            ts: nowSec - 30,
+            kind: 'buy',
+            mint: m3,
+            wallet: w1,
+            symbol: 'SMALLRECENT',
+            detail: { usd: 100 },
+          },
+        ],
+        wallets: [],
+      }),
+    });
+
+    const firstRender = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('status')).toHaveLength(1);
+    });
+    const toaster = screen.getByLabelText('Ping notifications');
+    expect(within(toaster).getByText('RECENT')).toBeInTheDocument();
+    expect(within(toaster).getByText('$250')).toBeInTheDocument();
+    expect(within(toaster).queryByText('STALE')).toBeNull();
+    expect(within(toaster).queryByText('SMALLRECENT')).toBeNull();
+
+    // Dismiss the toast, unmount, and remount: sessionStorage prevents re-toasting
+    fireEvent.click(within(toaster).getByRole('button', { name: 'Dismiss notification' }));
+    expect(screen.queryByRole('status')).toBeNull();
+    firstRender.unmount();
+
+    render(<App />);
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/ping');
+    });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('PingToaster auto-dismisses toasts after 30 seconds', async () => {
     vi.useFakeTimers();
     try {
       const m1 = addr('D');
@@ -886,7 +951,12 @@ describe('Cheesequake UI', () => {
       expect(screen.getByText('AUTO')).toBeInTheDocument();
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(6000);
+        await vi.advanceTimersByTimeAsync(29000);
+      });
+      expect(screen.getByText('AUTO')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
       });
 
       expect(screen.queryByText('AUTO')).toBeNull();
