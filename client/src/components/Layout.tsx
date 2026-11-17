@@ -24,6 +24,7 @@ export function Layout({
   lastUpdated,
   refreshing,
   onRefresh,
+  liveStatus,
   children,
 }: {
   activeTab: TabId;
@@ -31,6 +32,7 @@ export function Layout({
   lastUpdated: Date | null;
   refreshing: boolean;
   onRefresh: () => void;
+  liveStatus?: 'live' | 'reconnecting';
   children: ReactNode;
 }) {
   return (
@@ -139,6 +141,28 @@ export function Layout({
           </div>
 
           <div className="flex items-center gap-3 text-xs text-[#cfc3b4]">
+            {liveStatus && (
+              <span
+                aria-label={
+                  liveStatus === 'live'
+                    ? 'Live updates connected'
+                    : 'Reconnecting live updates'
+                }
+                className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                  liveStatus === 'live' ? 'text-emerald-400' : 'text-amber-400'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 rounded-full ${
+                    liveStatus === 'live'
+                      ? 'bg-emerald-400'
+                      : 'bg-amber-400 animate-pulse'
+                  }`}
+                />
+                {liveStatus === 'live' ? 'Live' : 'Reconnecting'}
+              </span>
+            )}
             {lastUpdated && (
               <span className="tabular-nums hidden sm:inline">
                 Updated {lastUpdated.toLocaleTimeString()}

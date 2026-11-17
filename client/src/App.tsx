@@ -26,6 +26,11 @@ const ACTIVE_TAB_STORAGE_KEY = 'cheesequake:tab-state:active-tab';
 const VALID_TABS = new Set<TabId>(['market', 'watch', 'ping', 'narratives', 'tracer']);
 const NOTIFIABLE_BANDS = new Set(['strong', 'confirm', 'neutral']);
 
+type DomainScope = TabId;
+type DomainTicks = Record<DomainScope, number>;
+const ALL_SCOPES: DomainScope[] = ['market', 'watch', 'ping', 'narratives', 'tracer'];
+const VALID_SCOPES = new Set<string>(ALL_SCOPES);
+
 function isValidTabId(value: unknown): value is TabId {
   return typeof value === 'string' && VALID_TABS.has(value as TabId);
 }
@@ -82,9 +87,31 @@ export default function App() {
     }
   }, [activeTab]);
   const [watchedSet, setWatchedSet] = useState<Set<string>>(() => new Set());
-  const [refreshTick, setRefreshTick] = useState(0);
+  const [ticks, setTicks] = useState<DomainTicks>({
+    market: 0,
+    watch: 0,
+    ping: 0,
+    narratives: 0,
+    tracer: 0,
+  });
+  const [liveStatus, setLiveStatus] = useState<'live' | 'reconnecting'>('reconnecting');
+  const liveStatusRef = useRef(liveStatus);
+  useEffect(() => {
+    liveStatusRef.current = liveStatus;
+  }, [liveStatus]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const bumpTicks = useCallback((scopes?: DomainScope[]) => {
+    const targets = scopes && scopes.length > 0 ? scopes : ALL_SCOPES;
+    setTicks((prev) => {
+      const next = { ...prev };
+      for (const scope of targets) {
+        next[scope] = prev[scope] + 1;
+      }
+      return next;
+    });
+  }, []);
   const [toasts, setToasts] = useState<PingToast[]>([]);
   const watchHydratedRef = useRef(false);
   const pingHydratedRef = useRef(false);
@@ -197,7 +224,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [refreshTick, enqueueToasts]);
+  }, [ticks.ping, enqueueToasts]);
 
   useEffect(() => {
     let active = true;
@@ -242,7 +269,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [refreshTick, enqueueToasts]);
+  }, [ticks.narratives, enqueueToasts]);
 
   const syncWatched = useCallback((coins: WatchCoin[] | undefined) => {
     setWatchedSet(new Set((coins || []).map((c) => c.mint)));
@@ -276,25 +303,64 @@ export default function App() {
       if (data && Array.isArray(data.coins)) {
         syncWatched(data.coins);
       }
-      setRefreshTick((t) => t + 1);
+      bumpTicks(['watch']);
     },
-    [watchedSet, syncWatched],
+    [watchedSet, syncWatched, bumpTicks],
   );
 
   const triggerRefresh = useCallback(() => {
     setRefreshing(true);
-    setRefreshTick((t) => t + 1);
+    bumpTicks();
     setLastUpdated(new Date());
     setTimeout(() => setRefreshing(false), 300);
-  }, []);
+  }, [bumpTicks]);
+
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') {
+      setLiveStatus('reconnecting');
+      return;
+    }
+
+    const es = new EventSource('/api/events');
+    es.onopen = () => {
+      setLiveStatus('live');
+    };
+    const handleUpdate = (e: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(String(e.data)) as { scopes?: unknown };
+        if (Array.isArray(parsed?.scopes)) {
+          const valid = parsed.scopes.filter(
+            (s): s is DomainScope => typeof s === 'string' && VALID_SCOPES.has(s),
+          );
+          if (valid.length > 0) {
+            bumpTicks(valid);
+            setLastUpdated(new Date());
+          }
+        }
+      } catch {
+        // Ignore malformed SSE payloads.
+      }
+    };
+    es.addEventListener('update', handleUpdate as EventListener);
+    es.onerror = () => {
+      setLiveStatus('reconnecting');
+    };
+
+    return () => {
+      es.removeEventListener('update', handleUpdate as EventListener);
+      es.close();
+    };
+  }, [bumpTicks]);
 
   useEffect(() => {
     const id = setInterval(() => {
-      setRefreshTick((t) => t + 1);
-      setLastUpdated(new Date());
-    }, 30000);
+      if (liveStatusRef.current !== 'live') {
+        bumpTicks();
+        setLastUpdated(new Date());
+      }
+    }, 60000);
     return () => clearInterval(id);
-  }, []);
+  }, [bumpTicks]);
 
   return (
     <>
@@ -304,28 +370,29 @@ export default function App() {
         lastUpdated={lastUpdated}
         refreshing={refreshing}
         onRefresh={triggerRefresh}
+        liveStatus={liveStatus}
       >
-        {activeTab === 'market' && <Market refreshTick={refreshTick} />}
+        {activeTab === 'market' && <Market refreshTick={ticks.market} />}
         {watchVisited && (
           <div role="tabpanel" hidden={activeTab !== 'watch'}>
-            <Watch refreshTick={refreshTick} onSyncWatched={syncWatched} />
+            <Watch refreshTick={ticks.watch} onSyncWatched={syncWatched} />
           </div>
         )}
         {activeTab === 'ping' && (
           <Ping
-            refreshTick={refreshTick}
+            refreshTick={ticks.ping}
             watchedSet={watchedSet}
             onToggleWatch={toggleWatch}
           />
         )}
         {activeTab === 'narratives' && (
           <Narratives
-            refreshTick={refreshTick}
+            refreshTick={ticks.narratives}
             watchedSet={watchedSet}
             onToggleWatch={toggleWatch}
           />
         )}
-        {activeTab === 'tracer' && <Tracer refreshTick={refreshTick} />}
+        {activeTab === 'tracer' && <Tracer refreshTick={ticks.tracer} />}
       </Layout>
       <PingToaster
         toasts={toasts}
