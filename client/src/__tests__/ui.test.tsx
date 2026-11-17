@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup, act } from '@testing-library/react';
 import App from '../App';
 import { KindTooltip } from '../components/KindTooltip';
 import { KIND_INFO, PARTS, BANDS, UNKNOWNS, explainPart } from '../lib/glossary';
@@ -679,5 +679,219 @@ describe('Cheesequake UI', () => {
       expect(screen.getAllByRole('img', { name: 'IMG' }).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getAllByText('FB').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('PingToaster silently hydrates historical alerts, toasts new >$100 alerts, deduplicates, and navigates to Ping on click', async () => {
+    const m1 = addr('A');
+    const m2 = addr('B');
+    const m3 = addr('C');
+    const w1 = addr('W');
+    let poll = 0;
+
+    globalThis.fetch = mockFetch({
+      ping: () => {
+        if (poll === 0) {
+          return {
+            alerts: [
+              {
+                ts: 1700000100,
+                kind: 'buy',
+                mint: m1,
+                wallet: w1,
+                wallet_label: 'Whale 1',
+                symbol: 'HIST',
+                detail: { usd: 250 },
+              },
+            ],
+            wallets: [],
+          };
+        }
+        if (poll === 1) {
+          return {
+            alerts: [
+              {
+                ts: 1700000100,
+                kind: 'buy',
+                mint: m1,
+                wallet: w1,
+                wallet_label: 'Whale 1',
+                symbol: 'HIST',
+                detail: { usd: 250 },
+              },
+              {
+                ts: 1700000200,
+                kind: 'buy',
+                mint: m2,
+                wallet: w1,
+                wallet_label: 'Whale 1',
+                symbol: 'ALPHA',
+                detail: { usd: 101 },
+              },
+              {
+                ts: 1700000201,
+                kind: 'exit_deployer',
+                mint: m3,
+                wallet: null,
+                symbol: 'EXIT',
+                detail: { side: 'sell', usd: 500 },
+              },
+              {
+                ts: 1700000202,
+                kind: 'buy',
+                mint: m1,
+                wallet: w1,
+                symbol: 'EXACT',
+                detail: { usd: 100 },
+              },
+              {
+                ts: 1700000203,
+                kind: 'sell',
+                mint: m1,
+                wallet: w1,
+                symbol: 'SMALL',
+                detail: { usd: 45 },
+              },
+              {
+                ts: 1700000204,
+                kind: 'consensus',
+                mint: m1,
+                wallet: null,
+                symbol: 'CONS',
+                detail: { wallets: [w1], mcap: 50000 },
+              },
+            ],
+            wallets: [],
+          };
+        }
+        return {
+          alerts: [
+            {
+              ts: 1700000100,
+              kind: 'buy',
+              mint: m1,
+              wallet: w1,
+              wallet_label: 'Whale 1',
+              symbol: 'HIST',
+              detail: { usd: 250 },
+            },
+            {
+              ts: 1700000200,
+              kind: 'buy',
+              mint: m2,
+              wallet: w1,
+              wallet_label: 'Whale 1',
+              symbol: 'ALPHA',
+              detail: { usd: 101 },
+            },
+          ],
+          wallets: [],
+        };
+      },
+    });
+
+    render(<App />);
+
+    // Initial hydration: historical $250 alert must not produce a toast
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/ping');
+    });
+    expect(screen.queryByRole('status')).toBeNull();
+
+    // Trigger next poll via Refresh button
+    poll = 1;
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('status')).toHaveLength(2);
+    });
+    const toaster = screen.getByLabelText('Ping notifications');
+    expect(within(toaster).getByText('ALPHA')).toBeInTheDocument();
+    expect(within(toaster).getByText('$101')).toBeInTheDocument();
+    expect(within(toaster).getByText('EXIT')).toBeInTheDocument();
+    expect(within(toaster).getByText('$500')).toBeInTheDocument();
+    expect(within(toaster).queryByText('EXACT')).toBeNull();
+    expect(within(toaster).queryByText('SMALL')).toBeNull();
+    expect(within(toaster).queryByText('CONS')).toBeNull();
+    expect(within(toaster).queryByText('HIST')).toBeNull();
+
+    // Dismiss one toast with close button without changing tabs
+    const dismissButtons = within(toaster).getAllByRole('button', {
+      name: 'Dismiss notification',
+    });
+    fireEvent.click(dismissButtons[0]);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.getByRole('tab', { name: /Market/i })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    // Click remaining toast to navigate to Ping tab and dismiss it
+    fireEvent.click(within(toaster).getByText('EXIT'));
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Ping/i })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    });
+    expect(screen.queryByRole('status')).toBeNull();
+
+    // Repeated poll with already-seen alerts does not duplicate toasts
+    poll = 2;
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Refresh now' })).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh now' }));
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/ping');
+    });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('PingToaster auto-dismisses toasts after 6 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const m1 = addr('D');
+      let poll = 0;
+
+      globalThis.fetch = mockFetch({
+        ping: () =>
+          poll === 0
+            ? { alerts: [], wallets: [] }
+            : {
+                alerts: [
+                  {
+                    ts: 1700000300,
+                    kind: 'exit_wallet',
+                    mint: m1,
+                    wallet: addr('W'),
+                    symbol: 'AUTO',
+                    detail: { usd: 320 },
+                  },
+                ],
+                wallets: [],
+              },
+      });
+
+      render(<App />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      poll = 1;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+
+      expect(screen.getByText('AUTO')).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+
+      expect(screen.queryByText('AUTO')).toBeNull();
+      expect(screen.queryByRole('status')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

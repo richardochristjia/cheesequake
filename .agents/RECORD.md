@@ -58,5 +58,6 @@ Entries are added or amended **only with human approval**.
 - (score) Scoring thresholds are project defaults held in one config file.
 - (outcome) The scanner persists each candidate's score and its later prices to the outcome log.
 - (dashboard) The dashboard is served on 127.0.0.1 without login.
+- (dashboard) The dashboard polls ping alerts across all tabs and displays bottom-right toast notifications for new trade alerts exceeding $100.
 - (dashboard) The Narratives tab explains each score part in plain words chosen from the part's share of its maximum points.
 - (trading) The scanner never signs transactions or places trades.
