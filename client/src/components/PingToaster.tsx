@@ -39,7 +39,7 @@ const NARRATIVE_TONE_CLASSES: Record<Tone, string> = {
   mut: 'text-[#cfc3b4] border-[#f4ede2]/15 bg-[#f4ede2]/5',
 };
 
-function ToastBody({ toast }: { toast: PingToast }) {
+export function ToastBody({ toast }: { toast: PingToast }) {
   if (toast.kind === 'narrative') {
     const { coin } = toast;
     const bi = bandInfo(coin.band);

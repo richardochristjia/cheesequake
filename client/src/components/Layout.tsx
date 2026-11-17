@@ -9,8 +9,10 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { BUTTON_TAP, SNAPPY_SPRING } from '../lib/motion';
+import type { NotificationItem } from '../App';
 import type { TabId } from '../types';
 import { Logo } from './Logo';
+import { NotificationBell } from './NotificationBell';
 
 const TABS: { id: TabId; label: string; icon: typeof Activity }[] = [
   { id: 'market', label: 'Market', icon: Activity },
@@ -27,6 +29,10 @@ export function Layout({
   refreshing,
   onRefresh,
   liveStatus,
+  notifications = [],
+  onOpenNotification,
+  onMarkAllNotificationsRead,
+  onClearNotifications,
   children,
 }: {
   activeTab: TabId;
@@ -35,6 +41,10 @@ export function Layout({
   refreshing: boolean;
   onRefresh: () => void;
   liveStatus?: 'live' | 'reconnecting';
+  notifications?: NotificationItem[];
+  onOpenNotification?: (item: NotificationItem) => void;
+  onMarkAllNotificationsRead?: () => void;
+  onClearNotifications?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -170,6 +180,12 @@ export function Layout({
                 Updated {lastUpdated.toLocaleTimeString()}
               </span>
             )}
+            <NotificationBell
+              notifications={notifications}
+              onOpenNotification={onOpenNotification ?? (() => {})}
+              onMarkAllRead={onMarkAllNotificationsRead ?? (() => {})}
+              onClear={onClearNotifications ?? (() => {})}
+            />
             <motion.button
               type="button"
               onClick={onRefresh}
