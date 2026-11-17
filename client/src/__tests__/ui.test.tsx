@@ -1199,14 +1199,17 @@ describe('Cheesequake UI', () => {
       target: { value: 'draft-mint' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Show chart' }));
-    expect(document.querySelector('iframe')).toBeTruthy();
+    const watchIframe = document.querySelector('iframe');
+    expect(watchIframe).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: /Market/i }));
+    // Watch stays mounted (hidden) so the chart iframe does not reload across tab switches
+    expect(document.querySelector('iframe')).toBe(watchIframe);
     fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
     await waitFor(() => {
       expect(screen.getByLabelText('Coin mint address')).toHaveValue('draft-mint');
       expect(screen.getByRole('button', { name: 'Hide chart' })).toBeInTheDocument();
-      expect(document.querySelector('iframe')).toBeTruthy();
+      expect(document.querySelector('iframe')).toBe(watchIframe);
     });
 
     // 3. Narratives -> Market -> Narratives preserves openMints and showAllThemes

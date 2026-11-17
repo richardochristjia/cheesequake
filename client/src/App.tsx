@@ -73,6 +73,14 @@ export default function App() {
     'market',
     { validate: isValidTabId },
   );
+  // Keep Watch mounted once visited so embedded DexScreener chart iframes do not reload on tab switches.
+  const [watchVisited, setWatchVisited] = useState(() => activeTab === 'watch');
+
+  useEffect(() => {
+    if (activeTab === 'watch') {
+      setWatchVisited(true);
+    }
+  }, [activeTab]);
   const [watchedSet, setWatchedSet] = useState<Set<string>>(() => new Set());
   const [refreshTick, setRefreshTick] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -298,8 +306,10 @@ export default function App() {
         onRefresh={triggerRefresh}
       >
         {activeTab === 'market' && <Market refreshTick={refreshTick} />}
-        {activeTab === 'watch' && (
-          <Watch refreshTick={refreshTick} onSyncWatched={syncWatched} />
+        {watchVisited && (
+          <div role="tabpanel" hidden={activeTab !== 'watch'}>
+            <Watch refreshTick={refreshTick} onSyncWatched={syncWatched} />
+          </div>
         )}
         {activeTab === 'ping' && (
           <Ping
