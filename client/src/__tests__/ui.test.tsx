@@ -134,8 +134,11 @@ describe('Cheesequake UI', () => {
       const { unmount } = render(<KindTooltip kind={kind} />);
       const btn = screen.getByRole('button', { name: `What ${expectedLabel} means` });
       expect(btn).toHaveAttribute('type', 'button');
-      const tip = screen.getByRole('tooltip', { hidden: true });
+      expect(screen.queryByRole('tooltip')).toBeNull();
+      fireEvent.focus(btn);
+      const tip = screen.getByRole('tooltip');
       expect(tip.textContent).toBe(KIND_INFO[kind]);
+      expect(btn).toHaveAttribute('aria-describedby', tip.id);
       unmount();
     }
 
