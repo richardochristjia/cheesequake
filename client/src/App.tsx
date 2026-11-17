@@ -55,10 +55,23 @@ function isValidNotificationItem(value: unknown): value is NotificationItem {
     return false;
   }
   if (toast.kind === 'ping') {
-    return typeof toast.alert === 'object' && toast.alert !== null;
+    if (typeof toast.alert !== 'object' || toast.alert === null || Array.isArray(toast.alert)) {
+      return false;
+    }
+    const alert = toast.alert as Record<string, unknown>;
+    return typeof alert.kind === 'string' && typeof alert.mint === 'string';
   }
   if (toast.kind === 'narrative') {
-    return typeof toast.coin === 'object' && toast.coin !== null;
+    if (typeof toast.coin !== 'object' || toast.coin === null || Array.isArray(toast.coin)) {
+      return false;
+    }
+    const coin = toast.coin as Record<string, unknown>;
+    return (
+      typeof coin.mint === 'string' &&
+      typeof coin.band === 'string' &&
+      typeof coin.score === 'number' &&
+      Number.isFinite(coin.score)
+    );
   }
   return false;
 }
@@ -213,12 +226,18 @@ export default function App() {
 
       const now = Date.now();
       setNotifications((prev) => {
+        const prevById = new Map(prev.map((item) => [item.toast.id, item]));
         const seen = new Set<string>();
         const next: NotificationItem[] = [];
         for (const toast of fresh) {
           if (seen.has(toast.id)) continue;
           seen.add(toast.id);
-          next.push({ toast, createdAt: now, read: false });
+          const existing = prevById.get(toast.id);
+          next.push(
+            existing
+              ? { toast, createdAt: existing.createdAt, read: existing.read }
+              : { toast, createdAt: now, read: false },
+          );
         }
         for (const item of prev) {
           if (seen.has(item.toast.id)) continue;
