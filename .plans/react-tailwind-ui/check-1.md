@@ -1,3 +1,0 @@
-- Plan says Vite dev proxy targets `http://127.0.0.1:4100` (plan.md:27); `src/config.js:7` defaults `port` to `4777` (`CHEESEQUAKE_PORT`). Configured Vite proxy to `http://127.0.0.1:${process.env.CHEESEQUAKE_PORT || 4777}`.
-- Plan says `test/server.test.js:59` reads `public/index.html` and `npm test` runs `node --test && vitest run` (plan.md:44,49); keeping `public/index.html` until Phase 5 and using `vitest run --passWithNoTests` in `npm test` until Phase 5 keeps `npm test` green at the end of Phase 1.
-- Bare `node --test` scans `client/src/test-setup.ts` (and later `client/src/__tests__/*.test.tsx`); updated root `package.json` `test` script to `node --test test/*.test.js && npm --prefix client test`.

@@ -1,6 +1,0 @@
-- GeckoTerminal pool batch (`/pools/multi/`) was never probed (src/sources/geckoterminal.js `poolsMulti`); if the shape differs, buyers become "unknown" for non-trending coins and wash/health stay unknown. Check: call it once against the live API.
-- RugCheck inner shapes of `transferFee.pct`, `token.supply`, `knownAccounts` are guesses (src/sources/rugcheck.js `normalise`); raw units of `insiderNetworks[].currentHolding` vs mint supply assumed to match. Check: run against two live mints and compare the insiders veto with the report.
-- Phases 6 and 7 were committed outcomes first because `src/score.js` imports `src/outcomes.js`.
-- Consensus ignores deployer-only wallets by only counting wallets from `wallets.txt`; a wallet in the file that is also a deployer still counts.
-- Exit alerts rely on candidate snapshots written every 5 minutes; a liquidity drop shorter than the snapshot gap can be missed (src/ping.js `checkExits`).
-- Wallet polling and Tracer wait for the first SOL price from a SOL-quoted pool (src/main.js); if none appears the wallet cycle silently skips. Check: start with a wallets.txt and confirm Ping fills within a few minutes.
