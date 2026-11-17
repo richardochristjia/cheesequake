@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { MotionConfig } from 'motion/react';
 import { Layout } from './components/Layout';
 import { PingToaster, type PingToast } from './components/PingToaster';
 import { usePersistedState } from './lib/tabState';
@@ -359,7 +360,7 @@ export default function App() {
   }, [bumpTicks]);
 
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       <Layout
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -395,6 +396,6 @@ export default function App() {
         onDismiss={dismissToast}
         onOpenToast={openFromToast}
       />
-    </>
+    </MotionConfig>
   );
 }
