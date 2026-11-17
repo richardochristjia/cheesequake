@@ -1,5 +1,6 @@
 import http from 'node:http';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { B58 } from './wallets.js';
@@ -21,8 +22,28 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
 };
 
-// deps: {db, config, tracer: {start(wallet), get(wallet)}, wallets: () => [{address,label}], onWatch, now}
-export function createServer({ db, config, tracer, wallets = () => [], onWatch = () => {}, now = Date.now }) {
+const VALID_SCOPES = new Set(['market', 'watch', 'ping', 'narratives', 'tracer']);
+
+// deps: {db, config, tracer: {start(wallet), get(wallet)}, wallets: () => [{address,label}], onWatch, events, now}
+export function createServer({ db, config, tracer, wallets = () => [], onWatch = () => {}, events = new EventEmitter(), now = Date.now }) {
+  const clients = new Set();
+  const broadcast = (scopes) => {
+    const valid = [...new Set((Array.isArray(scopes) ? scopes : [scopes]).filter((s) => VALID_SCOPES.has(s)))];
+    if (!valid.length) return;
+    const payload = `event: update\ndata: ${JSON.stringify({ scopes: valid })}\n\n`;
+    for (const client of [...clients]) {
+      if (client.res.writableEnded || client.res.destroyed) {
+        client.cleanup();
+        continue;
+      }
+      try {
+        client.res.write(payload);
+      } catch {
+        client.cleanup();
+      }
+    }
+  };
+  events?.on('update', broadcast);
   const api = {
     '/api/market': () => {
       const hourly = recentHourly(db, config.index.windowHours);
@@ -67,7 +88,7 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
     },
   };
 
-  return http.createServer((req, res) => {
+  const server = http.createServer((req, res) => {
     const send = (code, body, type = 'application/json') => {
       res.writeHead(code, { 'content-type': `${type}; charset=utf-8`, 'x-content-type-options': 'nosniff' });
       res.end(type === 'application/json' ? JSON.stringify(body) : body);
@@ -85,9 +106,43 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
         } else {
           db.prepare('DELETE FROM watched_coins WHERE mint = ?').run(mint);
         }
+        broadcast(['watch']);
         return send(200, { ok: true, coins: watchList(db, now(), config, wallets()) });
       }
       if (req.method !== 'GET') return send(405, { error: 'method not allowed' });
+      if (url.pathname === '/api/events') {
+        req.socket?.setTimeout?.(0);
+        res.writeHead(200, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          connection: 'keep-alive',
+          'x-content-type-options': 'nosniff',
+        });
+        res.write(': connected\n\n');
+        let closed = false;
+        const client = {
+          res,
+          cleanup: () => {
+            if (closed) return;
+            closed = true;
+            clearInterval(heartbeat);
+            clients.delete(client);
+          },
+        };
+        const heartbeat = setInterval(() => {
+          if (res.writableEnded || res.destroyed) return client.cleanup();
+          try {
+            res.write(': ping\n\n');
+          } catch {
+            client.cleanup();
+          }
+        }, 25000);
+        heartbeat.unref?.();
+        clients.add(client);
+        req.on('close', client.cleanup);
+        res.on('close', client.cleanup);
+        return;
+      }
       if (url.pathname === '/') {
         const indexPath = path.join(DIST_DIR, 'index.html');
         if (!existsSync(indexPath)) return send(404, { error: 'not found' });
@@ -115,6 +170,13 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
       return send(500, { error: 'internal error' });
     }
   });
+
+  server.broadcast = broadcast;
+  server.on('close', () => {
+    events?.off('update', broadcast);
+    for (const client of [...clients]) client.cleanup();
+  });
+  return server;
 }
 
 // Binds to loopback only.
