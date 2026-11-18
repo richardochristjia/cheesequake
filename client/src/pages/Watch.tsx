@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity,
@@ -35,7 +35,9 @@ import {
   fadeInVariants,
   staggerContainerVariants,
   staggerItemVariants,
+  tooltipVariants,
 } from '../lib/motion';
+import { PARTS, bandInfo, explainPart } from '../lib/glossary';
 import { isBoolean, isString, usePersistedState } from '../lib/tabState';
 import type { WatchCoin, WatchResponse } from '../types';
 
@@ -44,6 +46,102 @@ const WATCH_CHART_KEY_PREFIX = 'cheesequake:tab-state:watch:chart:';
 
 const DEFAULT_NOTE =
   'Watched coins are scanned first on every cycle and monitored for creator sells, tracked-wallet sells, and liquidity drops even if unlisted.';
+
+function ScoreStatTile({
+  coin,
+  scoreTxt,
+}: {
+  coin: WatchCoin;
+  scoreTxt: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+  const hasBreakdown =
+    coin.score !== null &&
+    coin.score !== undefined &&
+    Array.isArray(coin.scoreReasons) &&
+    coin.scoreReasons.length > 0;
+
+  if (!hasBreakdown) {
+    return (
+      <div className="rounded-lg border border-white/15 bg-white/[0.07] px-3 py-2">
+        <div className="flex items-center gap-1.5 text-xs text-[#cfc3b4]">
+          <Gauge aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[#e59a28]" />
+          <span>Score</span>
+        </div>
+        <div className="mt-1 truncate text-sm font-medium text-[#f4ede2]">
+          {scoreTxt}
+        </div>
+      </div>
+    );
+  }
+
+  const bi = bandInfo(coin.band);
+  const byPart = new Map((coin.scoreReasons || []).map((r) => [r.part, r]));
+
+  return (
+    <div
+      tabIndex={0}
+      aria-describedby={open ? tooltipId : undefined}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') setOpen(false);
+      }}
+      className="relative rounded-lg border border-white/15 bg-white/[0.07] px-3 py-2 cursor-help hover:border-[#e59a28]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e59a28]/70 transition-colors"
+    >
+      <div className="flex items-center gap-1.5 text-xs text-[#cfc3b4]">
+        <Gauge aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[#e59a28]" />
+        <span>Score</span>
+      </div>
+      <div className="mt-1 truncate text-sm font-medium text-[#f4ede2]">
+        {scoreTxt}
+      </div>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id={tooltipId}
+            role="tooltip"
+            variants={tooltipVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="absolute left-0 top-full mt-1.5 z-30 w-72 max-w-[85vw] rounded-lg border border-[#2d251d] bg-[#211c16] p-3 text-xs font-normal text-[#f4ede2] shadow-xl pointer-events-none"
+          >
+            <div className="mb-2 flex items-center justify-between gap-2 border-b border-[#2d251d] pb-1.5">
+              <span className="font-semibold text-[#f4ede2]">Score breakdown</span>
+              <Badge tone={bi.cls}>{bi.label}</Badge>
+            </div>
+            <ul className="space-y-1.5">
+              {Object.keys(PARTS).map((k) => {
+                const p = explainPart(k, byPart.get(k), coin.unknowns, null);
+                const pts = p.level === 'No data' ? 0 : p.points;
+                return (
+                  <li
+                    key={k}
+                    className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2"
+                  >
+                    <span className="truncate text-[#f4ede2]/90">{p.name}</span>
+                    <Badge tone={p.cls}>{p.level}</Badge>
+                    <span className="text-right text-[#cfc3b4] tabular-nums">
+                      {pts}/{p.max}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function WatchCard({
   coin,
@@ -88,7 +186,6 @@ function WatchCard({
       : `$${fmt(coin.vol_h24)}`;
 
   const stats = [
-    { label: 'Score', value: scoreTxt, Icon: Gauge },
     { label: 'Price', value: priceTxt, Icon: DollarSign },
     { label: 'Market cap', value: mcapTxt, Icon: Coins },
     { label: 'Liquidity', value: liqTxt, Icon: Droplets },
@@ -161,6 +258,7 @@ function WatchCard({
       </div>
 
       <div className="mb-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 tabular-nums">
+        <ScoreStatTile coin={coin} scoreTxt={scoreTxt} />
         {stats.map(({ label: statLabel, value, Icon }) => (
           <div
             key={statLabel}
