@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { BookmarkCheck, Eye } from 'lucide-react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { BookmarkCheck, Check, Copy, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 import { B58, short, type Tone } from '../lib/format';
 import { BUTTON_TAP, CARD_HOVER, SNAPPY_SPRING } from '../lib/motion';
@@ -82,6 +82,44 @@ export function Badge({
   );
 }
 
+/** Copy text via Clipboard API in secure contexts, falling back to execCommand for non-HTTPS origins. */
+export async function copyText(text: string): Promise<boolean> {
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.clipboard?.writeText &&
+    typeof window !== 'undefined' &&
+    window.isSecureContext
+  ) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to execCommand fallback if Clipboard API rejects (e.g. permissions).
+    }
+  }
+
+  if (typeof document === 'undefined' || !document.body) return false;
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+
+  try {
+    textarea.select();
+    textarea.setSelectionRange?.(0, text.length);
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
 export function AddressLink({
   address,
   className = '',
@@ -89,19 +127,67 @@ export function AddressLink({
   address: string | null | undefined;
   className?: string;
 }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   if (!address) return null;
-  if (!B58.test(address)) {
-    return <span className={`font-mono text-xs ${className}`}>{short(address)}</span>;
-  }
-  return (
-    <a
-      href={`https://solscan.io/account/${address}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`font-mono text-xs text-[#e59a28] hover:text-[#f4ede2] underline decoration-[#e59a28]/40 underline-offset-2 transition-colors ${className}`}
+
+  const handleCopy = async (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const ok = await copyText(address);
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setCopied(false);
+      timerRef.current = null;
+    }, 1500);
+  };
+
+  const label = copied ? 'Copied' : 'Copy address';
+  const copyButton = (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={label}
+      title={label}
+      className="inline-flex items-center justify-center rounded p-0.5 text-[#cfc3b4]/70 hover:text-[#f4ede2] hover:bg-[#2d251d]/60 transition-colors cursor-pointer"
     >
-      {short(address)}
-    </a>
+      {copied ? (
+        <Check className="h-3 w-3 text-[#5cd093]" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3 w-3" aria-hidden="true" />
+      )}
+    </button>
+  );
+
+  if (!B58.test(address)) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span className={`font-mono text-xs ${className}`}>{short(address)}</span>
+        {copyButton}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <a
+        href={`https://solscan.io/account/${address}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`font-mono text-xs text-[#e59a28] hover:text-[#f4ede2] underline decoration-[#e59a28]/40 underline-offset-2 transition-colors ${className}`}
+      >
+        {short(address)}
+      </a>
+      {copyButton}
+    </span>
   );
 }
 

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, within, cleanup, act } from '@testi
 import App from '../App';
 import { Layout } from '../components/Layout';
 import { KindTooltip } from '../components/KindTooltip';
-import { WatchButton } from '../components/ui';
+import { AddressLink, WatchButton } from '../components/ui';
 import { KIND_INFO, PARTS, BANDS, UNKNOWNS, explainPart } from '../lib/glossary';
 import type { WatchCoin } from '../types';
 
@@ -2185,5 +2185,159 @@ describe('Cheesequake UI', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
     fireEvent.click(await screen.findByLabelText('Early gems only'));
     expect(screen.getByText(/No early gems right now/)).toBeInTheDocument();
+  });
+
+  describe('AddressLink copy', () => {
+    const origSecureDesc = Object.getOwnPropertyDescriptor(window, 'isSecureContext');
+    const origClipboardDesc = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const origExecCommandDesc = Object.getOwnPropertyDescriptor(document, 'execCommand');
+
+    const restoreDescriptor = (
+      target: object,
+      key: string,
+      desc: PropertyDescriptor | undefined,
+    ) => {
+      if (desc) {
+        Object.defineProperty(target, key, desc);
+      } else {
+        delete (target as Record<string, unknown>)[key];
+      }
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
+      restoreDescriptor(window, 'isSecureContext', origSecureDesc);
+      restoreDescriptor(navigator, 'clipboard', origClipboardDesc);
+      restoreDescriptor(document, 'execCommand', origExecCommandDesc);
+    });
+
+    it('preserves Solscan link and renders inline copy button', () => {
+      const mint = addr('A');
+      render(<AddressLink address={mint} />);
+
+      const link = screen.getByRole('link');
+      expect(link).toHaveAttribute('href', `https://solscan.io/account/${mint}`);
+      expect(link).toHaveAttribute('target', '_blank');
+
+      const copyBtn = screen.getByRole('button', { name: 'Copy address' });
+      expect(copyBtn).toHaveAttribute('type', 'button');
+    });
+
+    it('copies full address via navigator.clipboard.writeText in secure context and resets copied state after 1500ms', async () => {
+      vi.useFakeTimers();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+
+      const mint = addr('B');
+      render(<AddressLink address={mint} />);
+
+      const copyBtn = screen.getByRole('button', { name: 'Copy address' });
+      await act(async () => {
+        fireEvent.click(copyBtn);
+      });
+
+      expect(writeText).toHaveBeenCalledWith(mint);
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+    });
+
+    it('falls back to textarea + document.execCommand("copy") on non-HTTPS origins and when Clipboard API rejects', async () => {
+      const mint = addr('C');
+      let copiedValue = '';
+      const execCommand = vi.fn((cmd: string) => {
+        if (cmd === 'copy') {
+          const ta = document.body.querySelector('textarea');
+          copiedValue = ta?.value ?? '';
+          return true;
+        }
+        return false;
+      });
+      Object.defineProperty(document, 'execCommand', {
+        value: execCommand,
+        configurable: true,
+      });
+
+      // Case 1: non-HTTPS origin (isSecureContext = false)
+      Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: undefined,
+        configurable: true,
+      });
+
+      const { unmount } = render(<AddressLink address={mint} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+      });
+      expect(execCommand).toHaveBeenCalledWith('copy');
+      expect(copiedValue).toBe(mint);
+      expect(document.body.querySelector('textarea')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+      unmount();
+
+      // Case 2: secure context but navigator.clipboard.writeText rejects
+      copiedValue = '';
+      execCommand.mockClear();
+      Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+        configurable: true,
+      });
+
+      render(<AddressLink address={mint} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+      });
+      expect(execCommand).toHaveBeenCalledWith('copy');
+      expect(copiedValue).toBe(mint);
+      expect(document.body.querySelector('textarea')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    });
+
+    it('does not show Copied state when both Clipboard API and execCommand fail', async () => {
+      Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+      Object.defineProperty(document, 'execCommand', {
+        value: vi.fn(() => false),
+        configurable: true,
+      });
+
+      render(<AddressLink address={addr('D')} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+      });
+      expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Copied' })).toBeNull();
+    });
+
+    it('stops click propagation so parent clickable containers do not fire', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      });
+      const onParentClick = vi.fn();
+
+      render(
+        <div onClick={onParentClick}>
+          <AddressLink address={addr('E')} />
+        </div>,
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copy address' }));
+      });
+
+      expect(writeText).toHaveBeenCalledTimes(1);
+      expect(onParentClick).not.toHaveBeenCalled();
+    });
   });
 });
