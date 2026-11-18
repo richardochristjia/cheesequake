@@ -145,9 +145,10 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen, image_url) VALUES (?,?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description, image_url = COALESCE(excluded.image_url, tokens.image_url)').run(mint, m.symbol, m.name, descOf.get(mint), nowS, m.image_url ?? null);
   }
   // Image fallback: only for mints that will reach upsertTokens (watched or not cheap-vetoed) and have no image yet.
+  const hasImage = db.prepare('SELECT image_url FROM tokens WHERE mint = ?');
   const need = [...markets.values()].filter((m) => !m.image_url
     && (watchedSet.has(m.mint) || !evaluate({ market: m, now: nowMs, names: CHEAP, config }).vetoes.length)
-    && !db.prepare('SELECT image_url FROM tokens WHERE mint = ?').get(m.mint)?.image_url);
+    && !hasImage.get(m.mint)?.image_url);
   for (let i = 0; i < need.length; i += 30) {
     for (const t of await safe(() => tokensMulti(deps.geckoGet, need.slice(i, i + 30).map((m) => m.mint)), [])) {
       if (markets.has(t.mint)) markets.get(t.mint).image_url = t.image_url;

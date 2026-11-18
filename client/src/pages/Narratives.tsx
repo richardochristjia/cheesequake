@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -34,6 +34,20 @@ const NARRATIVES_SHOW_ALL_THEMES_KEY =
 const NARRATIVES_HIDE_WATCHED_KEY =
   'cheesequake:tab-state:narratives:hide-watched';
 const NARRATIVES_GEMS_ONLY_KEY = 'cheesequake:tab-state:narratives:gems-only';
+
+function Toggle({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode }) {
+  return (
+    <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
+      />
+      {children}
+    </label>
+  );
+}
 
 export function Narratives({
   refreshTick,
@@ -182,24 +196,8 @@ export function Narratives({
           className={highlightClass}
           action={
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={gemsOnly}
-                  onChange={(e) => setGemsOnly(e.target.checked)}
-                  className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
-                />
-                Early gems only
-              </label>
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={hideWatched}
-                  onChange={(e) => setHideWatched(e.target.checked)}
-                  className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
-                />
-                Hide watched
-              </label>
+              <Toggle checked={gemsOnly} onChange={setGemsOnly}>Early gems only</Toggle>
+              <Toggle checked={hideWatched} onChange={setHideWatched}>Hide watched</Toggle>
             </div>
           }
         >
@@ -210,8 +208,8 @@ export function Narratives({
           ) : visibleRunning.length === 0 ? (
             <p className="text-sm text-[#cfc3b4]">
               {gemsOnly
-                ? <>No early gems right now. Turn off &ldquo;Early gems only&rdquo; to see every running coin.</>
-                : <>All currently running coins are watched. Turn off &ldquo;Hide watched&rdquo; to view them.</>}
+                ? 'No early gems right now. Turn off \u201cEarly gems only\u201d to see every running coin.'
+                : 'All currently running coins are watched. Turn off \u201cHide watched\u201d to view them.'}
             </p>
           ) : (
             <>
