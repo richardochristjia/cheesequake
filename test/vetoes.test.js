@@ -30,7 +30,7 @@ test('each veto fires on its own input', () => {
     top10: [{}, { topHolders: [{ address: 'a', owner: 'o', pct: 30 }] }],
     insiders: [{}, { insiderNetworks: [{ currentHolding: 300 }], token: { supply: 1000 } }],
     liquidity: [{ liquidity_usd: 500 }, {}],
-    age: [{ created_at: NOW / 1000 - 600 }, {}],
+    age: [{ created_at: NOW / 1000 - 120 }, {}],
     wash: [{ buyers_h1: 5, vol_h1: 90000 }, {}],
   };
   for (const [name, [m, r]] of Object.entries(cases)) assert.ok(run(m, r).vetoes.includes(name), name);

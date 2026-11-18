@@ -247,4 +247,96 @@ test('watchList returns latest vol_h24 and image_url with null defaults', () => 
   db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,?,?,1,'[]','[]','[]',0.02,200000)").run(NOWS, mWith, 82, 'strong');
   const [runCoin] = runningNow(db, NOW);
   assert.equal(runCoin.image_url, 'https://cdn.example/with.png');
+  assert.equal(runCoin.watched, true);
+});
+
+test('scoreParts incorporates chg_h1 in momentum', () => {
+  const flat = scoreParts({ market: market({ chg_h1: 0 }), report: report() });
+  const pumping = scoreParts({ market: market({ chg_h1: 50 }), report: report() });
+  const flatMo = flat.reasons.find((r) => r.part === 'momentum').points;
+  const pumpMo = pumping.reasons.find((r) => r.part === 'momentum').points;
+  assert.ok(pumpMo > flatMo, `expected ${pumpMo} > ${flatMo}`);
+});
+
+test('runCandidates includes active new pools, prioritizes discovery over watched, and respects minAgeMinutes=5', async () => {
+  const db = openDb(':memory:');
+  const activeNew = addr('N');
+  const inactiveNew = addr('I');
+  const youngPass = addr('Y');
+  const tooYoung = addr('Z');
+  const watchedOld = addr('W');
+
+  const ts = NOWS - 30;
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'new',?,15,20,25000)").run(ts, activeNew);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'new',?,2,5,25000)").run(ts, inactiveNew);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, youngPass);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, tooYoung);
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(watchedOld, NOWS - 3600);
+
+  // Fill 57 more trending mints so 60-mint cap is hit (1 activeNew + 2 trending + 57 filler = 60 discovery, pushing watchedOld out).
+  for (let i = 0; i < 57; i++) {
+    const fm = `F${String(i).padStart(3, '0')}` + '1'.repeat(36);
+    db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, fm);
+  }
+
+  let requestedMints = [];
+  const dexGet = async (url) => {
+    if (url.includes('/tokens/v1/solana/')) {
+      const mints = url.split('/tokens/v1/solana/')[1].split(',');
+      requestedMints = requestedMints.concat(mints);
+      return mints
+        .filter((m) => [activeNew, youngPass, tooYoung].includes(m))
+        .map((m) => ({
+          chainId: 'solana',
+          dexId: 'raydium',
+          pairAddress: addr('P'),
+          baseToken: { address: m, symbol: 'T', name: 'T' },
+          priceUsd: '0.01',
+          txns: { h1: { buys: 300, sells: 200 } },
+          volume: { h1: 20000, h6: 60000, h24: 90000 },
+          priceChange: { h1: 25 },
+          liquidity: { usd: 60000 },
+          fdv: 500000,
+          marketCap: 500000,
+          pairCreatedAt: (m === tooYoung ? NOWS - 3 * 60 : NOWS - 6 * 60) * 1000,
+        }));
+    }
+    return [];
+  };
+  const deps = { dexGet, geckoGet: async () => ({ data: [] }), rugGet: goodRaw(), rpc: { mintInfo: async () => info } };
+  await runCandidates({ db, deps, now: () => NOW });
+
+  assert.ok(requestedMints.includes(activeNew), 'active new pool included');
+  assert.ok(!requestedMints.includes(inactiveNew), 'inactive new pool excluded');
+  assert.ok(!requestedMints.includes(watchedOld), 'discovery prioritized ahead of watched in 60-mint cap');
+
+  const running = runningNow(db, NOW);
+  const runningMints = running.map((r) => r.mint);
+  assert.ok(runningMints.includes(activeNew), '6m old active new pool passes minAgeMinutes=5');
+  assert.ok(runningMints.includes(youngPass), '6m old trending pool passes minAgeMinutes=5');
+  assert.ok(!runningMints.includes(tooYoung), '3m old pool vetoed by minAgeMinutes=5');
+  assert.equal(running.find((r) => r.mint === activeNew).watched, false);
+});
+
+test('walletFacts decays tracked-wallet buy weight by recency over 24h', async () => {
+  const wallet = addr('K');
+  const makeRun = async (buyAgeSeconds) => {
+    const db = openDb(':memory:');
+    db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6) VALUES (?, 'trending', ?, 150, 400)").run(NOWS - 60, MINT);
+    db.prepare('INSERT INTO trades(wallet, mint, side, token_amount, quote_usd, ts, sig) VALUES (?,?,?,?,?,?,?)')
+      .run(wallet, MINT, 'buy', 1000, 100, NOWS - buyAgeSeconds, 'sig1');
+    const m = market();
+    const dexGet = async (url) => (url.includes('/tokens/v1/solana/') ? [{
+      chainId: 'solana', dexId: 'raydium', pairAddress: m.pool, baseToken: { address: MINT, symbol: 'T', name: 'T' }, priceUsd: '0.01',
+      txns: { h1: { buys: 300, sells: 200 } }, volume: { h1: 20000, h6: 60000, h24: 90000 }, priceChange: { h1: 1 },
+      liquidity: { usd: 60000 }, fdv: 500000, marketCap: 500000, pairCreatedAt: (NOWS - 6 * 3600) * 1000,
+    }] : []);
+    const deps = { dexGet, geckoGet: async () => ({ data: [] }), rugGet: goodRaw(), rpc: { mintInfo: async () => info } };
+    await runCandidates({ db, deps, tracked: [wallet], now: () => NOW });
+    return runningNow(db, NOW)[0].reasons.find((r) => r.part === 'wallets').points;
+  };
+
+  const recentPts = await makeRun(3600);
+  const stalePts = await makeRun(23 * 3600);
+  assert.ok(recentPts > stalePts, `expected recent wallet points (${recentPts}) > stale (${stalePts})`);
 });

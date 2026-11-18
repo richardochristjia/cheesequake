@@ -88,6 +88,7 @@ export interface RunningCoin {
   symbol: string | null;
   name: string | null;
   image_url?: string | null;
+  watched?: boolean;
   theme: string | null;
   score: number;
   band: string;

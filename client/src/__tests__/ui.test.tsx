@@ -414,6 +414,10 @@ describe('Cheesequake UI', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
 
+    const hideToggle = await screen.findByLabelText('Hide watched');
+    expect(hideToggle).toBeChecked();
+    fireEvent.click(hideToggle);
+
     const watchingBtns = await screen.findAllByRole('button', { name: 'Watching' });
     expect(watchingBtns[0]).toHaveAttribute('aria-pressed', 'true');
 
@@ -1600,6 +1604,7 @@ describe('Cheesequake UI', () => {
 
     // Narratives tab
     fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    fireEvent.click(await screen.findByLabelText('Hide watched'));
     const explainBtns = await screen.findAllByRole('button', {
       name: 'Explain score',
     });
@@ -2107,5 +2112,34 @@ describe('Cheesequake UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
     const dialog = screen.getByRole('dialog', { name: 'Notification history' });
     expect(within(dialog).getByText('GOOD')).toBeInTheDocument();
+  });
+
+  it('Narratives hides watched coins by default and reveals them when Hide watched is toggled off', async () => {
+    const mintFresh = addr('F');
+    const mintWatched = addr('W');
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        running: [
+          { mint: mintFresh, symbol: 'FRSH', watched: false, theme: null, score: 85, band: 'strong', mcap_usd: 150000, reasons: [], unknowns: [] },
+          { mint: mintWatched, symbol: 'WTCD', watched: true, theme: null, score: 78, band: 'confirm', mcap_usd: 200000, reasons: [], unknowns: [] },
+        ],
+        themes: [],
+        wallets: [],
+        calibration: { rows: [], missed: 0 },
+      }),
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+
+    const toggle = await screen.findByLabelText('Hide watched');
+    expect(toggle).toBeChecked();
+    const runningSection = screen.getByRole('heading', { name: 'Running now' }).closest('section')!;
+    expect(within(runningSection).getAllByText('FRSH').length).toBeGreaterThan(0);
+    expect(within(runningSection).queryByText('WTCD')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+    expect(within(runningSection).getAllByText('WTCD').length).toBeGreaterThan(0);
   });
 });
