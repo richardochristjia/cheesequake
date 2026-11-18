@@ -52,6 +52,9 @@ export interface WatchCoin {
   status: WatchStatus;
   label?: string;
   score: number | null;
+  band?: string | null;
+  unknowns?: string[];
+  scoreReasons?: ScoreReason[];
   price_usd: number | null;
   mcap_usd: number | null;
   liquidity_usd: number | null;

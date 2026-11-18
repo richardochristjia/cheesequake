@@ -2340,4 +2340,112 @@ describe('Cheesequake UI', () => {
       expect(onParentClick).not.toHaveBeenCalled();
     });
   });
+
+  it('Watch Score tile shows band and 6-part breakdown tooltip on hover/focus, handles unknowns & Escape, and omits tooltip when unscanned', async () => {
+    const coins: WatchCoin[] = [
+      {
+        mint: addr('S'),
+        symbol: 'SCND',
+        name: 'Scanned Coin',
+        pool: addr('P'),
+        status: 'safe',
+        label: 'Safe to hold',
+        score: 70,
+        band: 'confirm',
+        unknowns: ['liquidity'],
+        scoreReasons: [
+          { part: 'wallets', points: 16, max: 20 },
+          { part: 'health', points: 20, max: 31 },
+          { part: 'deployer', points: 4, max: 13 },
+          { part: 'liquidity', points: 5, max: 19 },
+          { part: 'momentum', points: 28, max: 31 },
+          { part: 'narrative', points: 0, max: 6 },
+        ],
+        price_usd: 0.05,
+        mcap_usd: 500000,
+        liquidity_usd: 75000,
+        vol_h24: 100000,
+        image_url: null,
+        reasons: ['Passed safety checks'],
+        alerts: [],
+      },
+      {
+        mint: addr('U'),
+        symbol: 'UNSC',
+        name: 'Unscanned Coin',
+        pool: null,
+        status: 'caution',
+        label: 'Caution',
+        score: null,
+        price_usd: null,
+        mcap_usd: null,
+        liquidity_usd: null,
+        vol_h24: null,
+        image_url: null,
+        reasons: ['Not scanned yet'],
+        alerts: [],
+      },
+    ];
+    globalThis.fetch = mockFetch({
+      watch: () => ({ ok: true, coins }),
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('70/100')).toBeInTheDocument();
+      expect(screen.getByText('unscanned')).toBeInTheDocument();
+    });
+
+    const scannedTile = screen.getByText('70/100').closest('[tabindex="0"]') as HTMLElement;
+    expect(scannedTile).not.toBeNull();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    // Hover opens tooltip with band badge and all 6 parts
+    fireEvent.mouseEnter(scannedTile);
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText('Promising')).toBeInTheDocument();
+    expect(within(tip).getByText('Wallets you follow')).toBeInTheDocument();
+    expect(within(tip).getByText('16/20')).toBeInTheDocument();
+    expect(within(tip).getByText('Buyer health')).toBeInTheDocument();
+    expect(within(tip).getByText('20/31')).toBeInTheDocument();
+    expect(within(tip).getByText('Creator')).toBeInTheDocument();
+    expect(within(tip).getByText('4/13')).toBeInTheDocument();
+    expect(within(tip).getByText('Easy to sell')).toBeInTheDocument();
+    expect(within(tip).getByText('No data')).toBeInTheDocument();
+    expect(within(tip).getByText('0/19')).toBeInTheDocument();
+    expect(within(tip).getByText('Momentum')).toBeInTheDocument();
+    expect(within(tip).getByText('28/31')).toBeInTheDocument();
+    expect(within(tip).getByText('Theme')).toBeInTheDocument();
+    expect(within(tip).getByText('0/6')).toBeInTheDocument();
+
+    // Mouse leave closes tooltip
+    fireEvent.mouseLeave(scannedTile);
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    // Focus opens tooltip, Escape closes it
+    fireEvent.focus(scannedTile);
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    fireEvent.keyDown(scannedTile, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    // Focus opens tooltip, blur closes it
+    fireEvent.focus(scannedTile);
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    fireEvent.blur(scannedTile);
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    // Unscanned coin has no interactive tooltip
+    const unscannedValue = screen.getByText('unscanned');
+    expect(unscannedValue.closest('[tabindex="0"]')).toBeNull();
+    fireEvent.mouseEnter(unscannedValue.parentElement as HTMLElement);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
 });
