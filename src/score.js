@@ -37,7 +37,10 @@ export function scoreParts({ market: m, report, q = 0, consensus = false, deploy
     : curve ? clamp(depth / 0.1) : (clamp(depth / 0.1) + clamp(locked / 100)) / 2, 'liquidity depth and lock');
 
   const mo = div(m.vol_h1, div(m.vol_h6, 6));
-  part('momentum', mo == null ? null : clamp((mo - 1) / 2), 'hourly volume against the 6-hour pace');
+  const volMo = mo == null ? null : clamp((mo - 1) / 2);
+  const chgMo = m.chg_h1 == null ? null : clamp(m.chg_h1 / 50);
+  const momentumVal = volMo != null && chgMo != null ? (volMo + chgMo) / 2 : (volMo ?? chgMo);
+  part('momentum', momentumVal, 'hourly volume pace and 1h price change');
 
   part('narrative', theme ? (theme.share > theme.prevShare ? 1 : 0.5) : 0, theme ? `theme "${theme.keyword}"` : 'no theme');
 
@@ -62,10 +65,15 @@ function walletFacts(db, mint, tracked, nowS, config) {
   let q = 0;
   for (const w of tracked) {
     const rows = db.prepare('SELECT side, token_amount, ts FROM trades WHERE wallet = ? AND mint = ?').all(w, mint);
-    const bought = rows.some((r) => r.side === 'buy' && r.ts > nowS - 86400);
+    const recentBuys = rows.filter((r) => r.side === 'buy' && r.ts > nowS - 86400);
     const net = rows.reduce((a, r) => a + (r.side === 'buy' ? r.token_amount : -r.token_amount), 0);
-    if (bought && net > 0) q += scorecardFor(db, w, config).weight;
+    if (recentBuys.length && net > 0) {
+      const latestBuyTs = Math.max(...recentBuys.map((r) => r.ts));
+      const decay = clamp(1 - (nowS - latestBuyTs) / 86400);
+      q += scorecardFor(db, w, config).weight * decay;
+    }
   }
+  q = Math.round(q * 100) / 100;
   const has = (kind) => !!db.prepare('SELECT 1 FROM alerts WHERE kind = ? AND mint = ? AND ts > ?').get(kind, mint, nowS - 86400);
   return { q, consensus: has('consensus'), deployerExit: has('exit_deployer') };
 }
@@ -86,26 +94,29 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   const nowS = Math.floor(nowMs / 1000);
   runThemes({ db, now: nowMs, config });
 
-  // 1. Universe, watched mints and tracked-wallet mints first, capped at 60.
+  // 1. Universe, discovery mints first (tracked-wallet, trending, active new pools, boosts/profiles), then watched mints, capped at 60.
   const watched = watchedMints(db);
   const watchedSet = new Set(watched);
   const tr = tracked.length ? db.prepare(
     `SELECT DISTINCT mint FROM trades WHERE side = 'buy' AND ts > ? AND wallet IN (${tracked.map(() => '?').join(',')})`).all(nowS - 86400, ...tracked).map((r) => r.mint) : [];
   const tsT = db.prepare("SELECT MAX(ts) t FROM pool_snapshots WHERE source = 'trending'").get().t;
   const trending = tsT ? db.prepare("SELECT mint FROM pool_snapshots WHERE source = 'trending' AND ts = ?").all(tsT).map((r) => r.mint) : [];
+  const tsN = db.prepare("SELECT MAX(ts) t FROM pool_snapshots WHERE source = 'new'").get().t;
+  const newPools = tsN ? db.prepare("SELECT mint FROM pool_snapshots WHERE source = 'new' AND ts = ? AND COALESCE(buyers_h1, 0) >= 10 AND COALESCE(liquidity_usd, 0) >= ?").all(tsN, config.veto.minLiquidityUsd).map((r) => r.mint) : [];
   const listings = [...(await safe(() => boosts(deps.dexGet), [])), ...(await safe(() => profiles(deps.dexGet), []))];
   const extra = listings.map((x) => x.mint);
   const descOf = new Map(listings.filter((x) => x.description).map((x) => [x.mint, x.description]));
-  const universe = [...new Set([...watched, ...tr, ...trending, ...extra])].filter(Boolean).slice(0, 60);
+  const universe = [...new Set([...tr, ...trending, ...newPools, ...extra, ...watched])].filter(Boolean).slice(0, 60);
   if (!universe.length) return [];
 
   // 2. Market data. If this source is down the whole cycle is skipped (nothing to score).
   const markets = await tokenBatch(deps.dexGet, universe);
 
-  // 3. Unique buyers: from the trending snapshot, else the pool batch endpoint, else unknown.
+  // 3. Unique buyers: from the trending or new snapshot, else the pool batch endpoint, else unknown.
   const buyersOf = new Map();
   for (const mint of markets.keys()) {
-    const s = tsT && db.prepare("SELECT buyers_h1, buyers_h6 FROM pool_snapshots WHERE source = 'trending' AND ts = ? AND mint = ?").get(tsT, mint);
+    const s = (tsT && db.prepare("SELECT buyers_h1, buyers_h6 FROM pool_snapshots WHERE source = 'trending' AND ts = ? AND mint = ?").get(tsT, mint))
+      || (tsN && db.prepare("SELECT buyers_h1, buyers_h6 FROM pool_snapshots WHERE source = 'new' AND ts = ? AND mint = ?").get(tsN, mint));
     if (s && s.buyers_h1 != null) buyersOf.set(mint, s);
   }
   const missing = [...markets.values()].filter((m) => !buyersOf.has(m.mint) && m.pool);
@@ -157,12 +168,19 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 // Latest row per mint from the last 30 minutes, kept only if listed, best score first.
 export function runningNow(db, now) {
   const since = Math.floor(now / 1000) - 1800;
+  const watchedSet = new Set(watchedMints(db));
   return db.prepare(
     `SELECT c.*, t.symbol, t.name, t.image_url, tt.keyword AS theme FROM candidates c
      JOIN (SELECT mint, MAX(id) id FROM candidates WHERE ts > ? GROUP BY mint) l ON l.id = c.id
      LEFT JOIN tokens t ON t.mint = c.mint LEFT JOIN token_theme tt ON tt.mint = c.mint
      WHERE c.listed = 1
-     ORDER BY c.score DESC`).all(since).map((r) => ({ ...r, reasons: JSON.parse(r.reasons), unknowns: JSON.parse(r.unknowns), vetoes: JSON.parse(r.vetoes) }));
+     ORDER BY c.score DESC`).all(since).map((r) => ({
+    ...r,
+    watched: watchedSet.has(r.mint),
+    reasons: JSON.parse(r.reasons),
+    unknowns: JSON.parse(r.unknowns),
+    vetoes: JSON.parse(r.vetoes),
+  }));
 }
 
 const usd = (n) => (n == null ? null : '$' + Math.round(Number(n)).toLocaleString('en-US'));

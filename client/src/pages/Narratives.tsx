@@ -31,6 +31,8 @@ import type { NarrativesResponse } from '../types';
 const NARRATIVES_OPEN_MINTS_KEY = 'cheesequake:tab-state:narratives:open-mints';
 const NARRATIVES_SHOW_ALL_THEMES_KEY =
   'cheesequake:tab-state:narratives:show-all-themes';
+const NARRATIVES_HIDE_WATCHED_KEY =
+  'cheesequake:tab-state:narratives:hide-watched';
 
 export function Narratives({
   refreshTick,
@@ -53,6 +55,11 @@ export function Narratives({
   const [showAllThemes, setShowAllThemes] = usePersistedState<boolean>(
     NARRATIVES_SHOW_ALL_THEMES_KEY,
     false,
+    { validate: isBoolean },
+  );
+  const [hideWatched, setHideWatched] = usePersistedState<boolean>(
+    NARRATIVES_HIDE_WATCHED_KEY,
+    true,
     { validate: isBoolean },
   );
 
@@ -104,6 +111,9 @@ export function Narratives({
 
   const themes = data.themes || [];
   const visibleThemes = showAllThemes ? themes : themes.slice(0, 5);
+  const visibleRunning = hideWatched
+    ? data.running.filter((r) => !(r.watched || watchedSet.has(r.mint)))
+    : data.running;
   const calEmpty = `No results yet. The tool checks each coin's price 1, 6 and 24 hours later.${
     data.calibration.missed ? ` Missed: ${data.calibration.missed}.` : ''
   }`;
@@ -161,15 +171,30 @@ export function Narratives({
           title="Running now"
           subtitle="Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction."
           className={highlightClass}
+          action={
+            <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideWatched}
+                onChange={(e) => setHideWatched(e.target.checked)}
+                className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
+              />
+              Hide watched
+            </label>
+          }
         >
           {data.running.length === 0 ? (
             <p className="text-sm text-[#cfc3b4]">
               Nothing has passed every safety check in the last 30 minutes.
             </p>
+          ) : visibleRunning.length === 0 ? (
+            <p className="text-sm text-[#cfc3b4]">
+              All currently running coins are watched. Turn off &ldquo;Hide watched&rdquo; to view them.
+            </p>
           ) : (
             <>
               <div className="sm:hidden space-y-2.5">
-                {data.running.map((r, idx) => {
+                {visibleRunning.map((r, idx) => {
                   const isOpen = openMints.has(r.mint);
                   const bi = bandInfo(r.band);
                   const mcap =
@@ -297,7 +322,7 @@ export function Narratives({
                   </tr>
                 </thead>
                   <tbody className="divide-y divide-[#2d251d]/70">
-                    {data.running.map((r, idx) => {
+                    {visibleRunning.map((r, idx) => {
                       const isOpen = openMints.has(r.mint);
                       const bi = bandInfo(r.band);
                       const mcap =
