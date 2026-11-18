@@ -457,3 +457,58 @@ test('missing DexScreener image is filled from GeckoTerminal tokens/multi, cheap
   assert.ok(asked[0].includes(MINT) && !asked[0].includes(dead));
   assert.equal(runningNow(db, NOW).find((r) => r.mint === MINT).image_url, 'https://img.example/m.png');
 });
+
+// Seeds one listed candidate plus its 'candidate' snapshot rows; `snap: null` seeds no snapshot.
+function gemRow(over = {}, db = openDb(':memory:')) {
+  const { mcap = 100000, snap = {} } = over;
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, mcap_usd) VALUES (?,?,70,'confirm',1,'[]','[]','[]',?)").run(NOWS - 60, MINT, mcap);
+  if (snap) {
+    const s = { created_at: NOWS - 3600, buyers_h1: 30, buyers_h6: 60, buys_h1: 60, sells_h1: 40, ...snap };
+    db.prepare("INSERT INTO pool_snapshots(ts, source, mint, created_at, buyers_h1, buyers_h6, buys_h1, sells_h1) VALUES (?, 'candidate', ?, ?, ?, ?, ?, ?)")
+      .run(NOWS - 60, MINT, s.created_at, s.buyers_h1, s.buyers_h6, s.buys_h1, s.sells_h1);
+  }
+  return db;
+}
+const isGem = (db) => runningNow(db, NOW)[0].gem;
+
+test('gem: true when every rule holds, and the raw snapshot columns stay out of the row', () => {
+  const db = gemRow();
+  const [r] = runningNow(db, NOW);
+  assert.equal(r.gem, true);
+  assert.ok(!('buyers_h1' in r) && !('created_at' in r));
+});
+
+test('gem: each rule failing alone gives false', () => {
+  assert.equal(isGem(gemRow({ mcap: 19999 })), false);
+  assert.equal(isGem(gemRow({ mcap: 500001 })), false);
+  assert.equal(isGem(gemRow({ mcap: null })), false);
+  assert.equal(isGem(gemRow({ snap: { created_at: NOWS - 30 * 3600 } })), false);
+  assert.equal(isGem(gemRow({ snap: { buyers_h1: 9, buyers_h6: 6 } })), false);
+  assert.equal(isGem(gemRow({ snap: { buyers_h1: 10, buyers_h6: 60 } })), false); // surge 1
+  assert.equal(isGem(gemRow({ snap: { buys_h1: 50, sells_h1: 50 } })), false); // share 0.5
+});
+
+test('gem: null or zero inputs are false, not NaN or a throw', () => {
+  assert.equal(isGem(gemRow({ snap: { buyers_h6: null } })), false);
+  assert.equal(isGem(gemRow({ snap: { buyers_h6: 0 } })), false);
+  assert.equal(isGem(gemRow({ snap: { buys_h1: 0, sells_h1: 0 } })), false);
+  assert.equal(isGem(gemRow({ snap: { buys_h1: null } })), false);
+  assert.equal(isGem(gemRow({ snap: { created_at: null } })), false);
+  assert.equal(isGem(gemRow({ snap: null })), false);
+});
+
+test('gem: bounds are inclusive on mcap, buyers, surge and share, and age is strict', () => {
+  assert.equal(isGem(gemRow({ mcap: 20000 })), true);
+  assert.equal(isGem(gemRow({ mcap: 500000 })), true);
+  assert.equal(isGem(gemRow({ snap: { buyers_h1: 10, buyers_h6: 30, buys_h1: 55, sells_h1: 45 } })), true); // surge 2, share 0.55
+  assert.equal(isGem(gemRow({ snap: { created_at: NOWS - 24 * 3600 } })), false);
+  assert.equal(isGem(gemRow({ snap: { created_at: NOWS - 24 * 3600 + 1 } })), true);
+});
+
+test('gem: duplicate candidate snapshot rows give one running row, judged by the latest', () => {
+  const db = gemRow({ snap: { buyers_h1: 3, buyers_h6: 60 } });
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, created_at, buyers_h1, buyers_h6, buys_h1, sells_h1) VALUES (?, 'candidate', ?, ?, 30, 60, 60, 40)").run(NOWS - 60, MINT, NOWS - 3600);
+  const rows = runningNow(db, NOW);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].gem, true);
+});

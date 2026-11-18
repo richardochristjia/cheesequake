@@ -75,7 +75,7 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
       const hour = Math.floor(now() / 1000 / 3600) * 3600;
       return {
         themes: db.prepare('SELECT keyword, tokens, volume, share FROM theme_hourly WHERE hour = ? ORDER BY volume DESC').all(hour),
-        running: runningNow(db, now()),
+        running: runningNow(db, now(), config),
         wallets: wallets().map((w) => ({ ...w, ...scorecardFor(db, w.address, config) })),
         calibration: calibration(db, config),
       };

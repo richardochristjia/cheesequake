@@ -190,21 +190,35 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 }
 
 // Latest row per mint from the last 30 minutes, kept only if listed, best score first.
-export function runningNow(db, now) {
+export function runningNow(db, now, config = defaultConfig) {
   const since = Math.floor(now / 1000) - 1800;
   const watchedSet = new Set(watchedMints(db));
+  const g = config.gem;
   return db.prepare(
-    `SELECT c.*, t.symbol, t.name, t.image_url, tt.keyword AS theme FROM candidates c
+    `SELECT c.*, t.symbol, t.name, t.image_url, tt.keyword AS theme,
+       s.created_at, s.buyers_h1, s.buyers_h6, s.buys_h1, s.sells_h1 FROM candidates c
      JOIN (SELECT mint, MAX(id) id FROM candidates WHERE ts > ? GROUP BY mint) l ON l.id = c.id
+     LEFT JOIN pool_snapshots s ON s.rowid = (SELECT MAX(rowid) FROM pool_snapshots WHERE mint = c.mint AND ts = c.ts AND source = 'candidate')
      LEFT JOIN tokens t ON t.mint = c.mint LEFT JOIN token_theme tt ON tt.mint = c.mint
      WHERE c.listed = 1
-     ORDER BY c.score DESC`).all(since).map((r) => ({
-    ...r,
-    watched: watchedSet.has(r.mint),
-    reasons: JSON.parse(r.reasons),
-    unknowns: JSON.parse(r.unknowns),
-    vetoes: JSON.parse(r.vetoes),
-  }));
+     ORDER BY c.score DESC`).all(since).map(({ created_at, buyers_h1, buyers_h6, buys_h1, sells_h1, ...r }) => {
+    const ageH = created_at == null ? null : (now / 1000 - created_at) / 3600;
+    const surge = buyers_h1 != null && buyers_h6 ? buyers_h1 / (buyers_h6 / 6) : null;
+    const trades = buys_h1 == null || sells_h1 == null ? 0 : buys_h1 + sells_h1;
+    const gem = r.mcap_usd != null && r.mcap_usd >= g.minMcapUsd && r.mcap_usd <= g.maxMcapUsd
+      && ageH != null && ageH < g.maxAgeHours
+      && buyers_h1 != null && buyers_h1 >= g.minBuyersH1
+      && surge != null && surge >= g.minSurge
+      && trades > 0 && buys_h1 / trades >= g.minBuyShare;
+    return {
+      ...r,
+      gem,
+      watched: watchedSet.has(r.mint),
+      reasons: JSON.parse(r.reasons),
+      unknowns: JSON.parse(r.unknowns),
+      vetoes: JSON.parse(r.vetoes),
+    };
+  });
 }
 
 const usd = (n) => (n == null ? null : '$' + Math.round(Number(n)).toLocaleString('en-US'));

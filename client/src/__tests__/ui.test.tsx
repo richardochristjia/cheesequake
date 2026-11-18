@@ -2143,4 +2143,47 @@ describe('Cheesequake UI', () => {
     expect(toggle).not.toBeChecked();
     expect(within(runningSection).getAllByText('WTCD').length).toBeGreaterThan(0);
   });
+
+  it('Narratives gems-only chip filters to gem rows, shows the badge and empty state, and persists across remount', async () => {
+    const mintGem = addr('G');
+    const mintPlain = addr('P');
+    let running = [
+      { mint: mintGem, symbol: 'GEMM', watched: false, gem: true, theme: null, score: 85, band: 'strong', mcap_usd: 150000, reasons: [], unknowns: [] },
+      { mint: mintPlain, symbol: 'PLAN', watched: false, gem: false, theme: null, score: 70, band: 'confirm', mcap_usd: 200000, reasons: [], unknowns: [] },
+    ];
+    globalThis.fetch = mockFetch({
+      narratives: () => ({ running, themes: [], wallets: [], calibration: { rows: [], missed: 0 } }),
+    });
+
+    const first = render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    const chip = await screen.findByLabelText('Early gems only');
+    expect(chip).not.toBeChecked();
+    expect((await screen.findAllByText('Early gem')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('PLAN').length).toBeGreaterThan(0);
+
+    fireEvent.click(chip);
+    const section = () => screen.getByRole('heading', { name: 'Running now' }).closest('section')!;
+    expect(within(section()).getAllByText('GEMM').length).toBeGreaterThan(0);
+    expect(within(section()).queryByText('PLAN')).toBeNull();
+
+    first.unmount();
+    render(<App />);
+    expect(await screen.findByLabelText('Early gems only')).toBeChecked();
+    expect(within(section()).queryByText('PLAN')).toBeNull();
+    expect(within(section()).getAllByText('GEMM').length).toBeGreaterThan(0);
+  });
+
+  it('Narratives gems-only shows the gem empty state when no running coin is a gem', async () => {
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        running: [{ mint: addr('P'), symbol: 'PLAN', watched: false, theme: null, score: 70, band: 'confirm', mcap_usd: 200000, reasons: [], unknowns: [] }],
+        themes: [], wallets: [], calibration: { rows: [], missed: 0 },
+      }),
+    });
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    fireEvent.click(await screen.findByLabelText('Early gems only'));
+    expect(screen.getByText(/No early gems right now/)).toBeInTheDocument();
+  });
 });
