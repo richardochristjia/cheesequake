@@ -19,7 +19,7 @@ export const config = Object.freeze({
   universe: { cap: 60, newPools: 15, wallets: 15 }, // slots per source in the candidate universe
   consensus: { wallets: 3, windowMinutes: 60 },
   scorecard: { sniperHoldSeconds: 300, minHolds: 3, ratedTrades: 10 },
-  weights: { wallets: 20, health: 25, deployer: 10, liquidity: 15, momentum: 25, narrative: 5 },
+  weights: { wallets: 20, health: 31, deployer: 13, liquidity: 19, momentum: 31, narrative: 6 }, // non-wallet parts sum to 100; wallets is a bonus
   bands: [['strong', 80], ['confirm', 65], ['neutral', 45], ['risk', 25], ['avoid', 0]],
   unknownCap: 79,
   exit: { liquidityDropShare: 0.33 },
