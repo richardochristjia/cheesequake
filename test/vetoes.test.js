@@ -80,3 +80,11 @@ test('inactive: pass at 25 buyers, falls back to buys_h1, unknown when both are 
   assert.deepEqual(v({ buyers_h1: null, buys_h1: 30 }), { vetoes: [], unknowns: [] });
   assert.deepEqual(v({ buyers_h1: null, buys_h1: null }).unknowns, ['inactive']);
 });
+
+test('inactive: 9 buyers vetoed, 10 pass, same boundary on the buys_h1 fallback', () => {
+  const v = (o) => run(o, {}, null, ['inactive']).vetoes;
+  assert.deepEqual(v({ buyers_h1: 9 }), ['inactive']);
+  assert.deepEqual(v({ buyers_h1: 10 }), []);
+  assert.deepEqual(v({ buyers_h1: null, buys_h1: 9 }), ['inactive']);
+  assert.deepEqual(v({ buyers_h1: null, buys_h1: 10 }), []);
+});
