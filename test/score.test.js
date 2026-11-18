@@ -440,3 +440,20 @@ test('rescaled weights: perfect base parts score 100, wallet bonus stays capped,
   assert.ok(s.unknowns.length);
   assert.equal(capScore(100, s.unknowns), 79);
 });
+
+test('missing DexScreener image is filled from GeckoTerminal tokens/multi, cheap-vetoed mints are not requested', async () => {
+  const db = openDb(':memory:');
+  const dead = addr('D');
+  for (const [m, b] of [[MINT, 150], [dead, 2]]) db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6) VALUES (?, 'trending', ?, ?, 400)").run(NOWS - 60, m, b);
+  const asked = [];
+  const geckoGet = async (url) => {
+    if (!url.includes('/tokens/multi/')) return { data: [] };
+    asked.push(url);
+    return { data: [{ id: 'solana_' + MINT, attributes: { address: MINT, image_url: 'https://img.example/m.png' } }] };
+  };
+  const { deps } = universeDeps(db, { geckoGet });
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.equal(asked.length, 1);
+  assert.ok(asked[0].includes(MINT) && !asked[0].includes(dead));
+  assert.equal(runningNow(db, NOW).find((r) => r.mint === MINT).image_url, 'https://img.example/m.png');
+});

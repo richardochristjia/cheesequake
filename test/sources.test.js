@@ -18,3 +18,11 @@ test('createRpc().transaction() requests maxSupportedTransactionVersion: 1', asy
     { encoding: 'jsonParsed', maxSupportedTransactionVersion: 1 },
   ]);
 });
+
+test('tokensMulti keeps real images and drops null and missing.png', async () => {
+  const { tokensMulti } = await import('../src/sources/geckoterminal.js');
+  const row = (a, image_url) => ({ id: 'solana_' + a, attributes: { address: a, image_url } });
+  const get = async () => ({ data: [row('A', 'https://x/a.png'), row('B', 'https://x/missing.png'), row('C', null), { id: 'solana_D' }] });
+  assert.deepEqual(await tokensMulti(get, ['A', 'B', 'C', 'D']), [{ mint: 'A', image_url: 'https://x/a.png' }]);
+  assert.deepEqual(await tokensMulti(async () => ({ data: 'x' }), ['A']), []);
+});
