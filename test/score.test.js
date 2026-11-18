@@ -258,7 +258,7 @@ test('scoreParts incorporates chg_h1 in momentum', () => {
   assert.ok(pumpMo > flatMo, `expected ${pumpMo} > ${flatMo}`);
 });
 
-test('runCandidates includes active new pools, prioritizes discovery over watched, and respects minAgeMinutes=5', async () => {
+test('runCandidates includes active new pools, prioritizes watched over discovery, and respects minAgeMinutes=5', async () => {
   const db = openDb(':memory:');
   const activeNew = addr('N');
   const inactiveNew = addr('I');
@@ -273,10 +273,11 @@ test('runCandidates includes active new pools, prioritizes discovery over watche
   db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, tooYoung);
   db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(watchedOld, NOWS - 3600);
 
-  // Fill 57 more trending mints so 60-mint cap is hit (1 activeNew + 2 trending + 57 filler = 60 discovery, pushing watchedOld out).
+  // Fill 57 more new-pool mints so 60-mint cap is hit (1 watched + 2 trending + 1 activeNew + 57 filler = 61, pushing last filler out).
+  let lastFiller;
   for (let i = 0; i < 57; i++) {
-    const fm = `F${String(i).padStart(3, '0')}` + '1'.repeat(36);
-    db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, fm);
+    lastFiller = `F${String(i).padStart(3, '0')}` + '1'.repeat(36);
+    db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'new',?,20,40,30000)").run(ts, lastFiller);
   }
 
   let requestedMints = [];
@@ -308,7 +309,8 @@ test('runCandidates includes active new pools, prioritizes discovery over watche
 
   assert.ok(requestedMints.includes(activeNew), 'active new pool included');
   assert.ok(!requestedMints.includes(inactiveNew), 'inactive new pool excluded');
-  assert.ok(!requestedMints.includes(watchedOld), 'discovery prioritized ahead of watched in 60-mint cap');
+  assert.ok(requestedMints.includes(watchedOld), 'watched prioritized ahead of discovery in 60-mint cap');
+  assert.ok(!requestedMints.includes(lastFiller), 'excess discovery mint pushed out by 60-mint cap');
 
   const running = runningNow(db, NOW);
   const runningMints = running.map((r) => r.mint);
