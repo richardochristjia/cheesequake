@@ -41,6 +41,11 @@ const rules = (c) => ({
     const thin = m.buyers_h1 < c.veto.washMinBuyers && m.vol_h1 > c.veto.washVolumeUsd;
     return surge || thin ? 'veto' : null;
   },
+  // buys_h1 is a trade count, a looser fallback for when unique buyers are unknown.
+  inactive: ({ market: m }) => {
+    const n = m?.buyers_h1 ?? m?.buys_h1;
+    return n == null ? 'unknown' : n < c.veto.minBuyersH1 ? 'veto' : null;
+  },
 });
 
 // Either source saying "active" means active; a mismatch counts as active.
@@ -50,7 +55,7 @@ function authority(key, report, mintInfo) {
   return vals.length ? null : 'unknown';
 }
 
-export const CHEAP = ['liquidity', 'age', 'wash'];
+export const CHEAP = ['liquidity', 'age', 'wash', 'inactive'];
 
 // `names` limits which rules run (the pipeline runs the cheap ones first).
 export function evaluate({ market, report = null, mintInfo = null, now, names, config = defaultConfig }) {
