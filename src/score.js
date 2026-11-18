@@ -49,7 +49,7 @@ export function scoreParts({ market: m, report, q = 0, consensus = false, deploy
     part: p, points: Math.round(value * w[p] * 10) / 10, max: w[p],
     note: unknowns.includes(p) ? `unknown: ${note}` : note,
   }));
-  return { score: Math.round(Object.entries(parts).reduce((a, [p, { value }]) => a + value * w[p], 0)), reasons, unknowns };
+  return { score: Math.min(100, Math.round(Object.entries(parts).reduce((a, [p, { value }]) => a + value * w[p], 0))), reasons, unknowns };
 }
 
 export const capScore = (score, unknowns, config = defaultConfig) => (unknowns.length ? Math.min(score, config.unknownCap) : score);

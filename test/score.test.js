@@ -427,3 +427,16 @@ test('null DexScreener liquidity, volume and change are filled from GeckoTermina
   const s = db.prepare("SELECT liquidity_usd, vol_h1, vol_h6, chg_h1, buyers_h1 FROM pool_snapshots WHERE source = 'candidate' AND mint = ?").get(MINT);
   assert.deepEqual({ ...s }, { liquidity_usd: 45000, vol_h1: 700, vol_h6: 2100, chg_h1: 12, buyers_h1: 25 });
 });
+
+test('rescaled weights: perfect base parts score 100, wallet bonus stays capped, unknowns cap at 79', () => {
+  const perfect = {
+    market: market({ buys_h1: 700, sells_h1: 300, chg_h1: 50, vol_h1: 30000 }),
+    report: report({ topHolders: [] }),
+    theme: { keyword: 'k', share: 0.2, prevShare: 0.1 },
+  };
+  assert.equal(scoreParts(perfect).score, 100);
+  assert.equal(scoreParts({ ...perfect, q: 5, consensus: true }).score, 100);
+  const s = scoreParts({ ...perfect, report: null });
+  assert.ok(s.unknowns.length);
+  assert.equal(capScore(100, s.unknowns), 79);
+});

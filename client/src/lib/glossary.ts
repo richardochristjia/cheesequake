@@ -26,7 +26,7 @@ interface PartDef {
 export const PARTS: Record<string, PartDef> = {
   wallets: {
     name: 'Wallets you follow',
-    max: 30,
+    max: 20,
     levels: {
       Good: 'Multiple tracked wallets hold this coin.',
       OK: 'Some tracked wallets hold this coin.',
@@ -37,7 +37,7 @@ export const PARTS: Record<string, PartDef> = {
   },
   health: {
     name: 'Buyer health',
-    max: 25,
+    max: 31,
     levels: {
       Good: 'New buyers are arriving quickly, buys lead sells, and top holders own a small share.',
       OK: 'New buyers are arriving, buys outnumber sells, and the 10 biggest holders do not own too much.',
@@ -48,7 +48,7 @@ export const PARTS: Record<string, PartDef> = {
   },
   deployer: {
     name: 'Creator',
-    max: 15,
+    max: 13,
     levels: {
       Good: 'The person who made the coin still holds some and has not been seen selling.',
       OK: 'The person who made the coin has not been seen selling, but holds none of it now.',
@@ -59,7 +59,7 @@ export const PARTS: Record<string, PartDef> = {
   },
   liquidity: {
     name: 'Easy to sell',
-    max: 15,
+    max: 19,
     levels: {
       Good: 'There is enough money in the trading pool, and it is locked so nobody can pull it out.',
       OK: 'The trading pool has moderate depth or lock coverage.',
@@ -70,7 +70,7 @@ export const PARTS: Record<string, PartDef> = {
   },
   momentum: {
     name: 'Momentum',
-    max: 10,
+    max: 31,
     levels: {
       Good: 'Trading in the last hour is much faster than its 6-hour pace.',
       OK: 'Trading in the last hour is picking up compared with its 6-hour pace.',
@@ -81,7 +81,7 @@ export const PARTS: Record<string, PartDef> = {
   },
   narrative: {
     name: 'Theme',
-    max: 5,
+    max: 6,
     levels: {
       Good: (t) =>
         t
