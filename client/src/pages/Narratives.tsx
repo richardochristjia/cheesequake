@@ -33,6 +33,7 @@ const NARRATIVES_SHOW_ALL_THEMES_KEY =
   'cheesequake:tab-state:narratives:show-all-themes';
 const NARRATIVES_HIDE_WATCHED_KEY =
   'cheesequake:tab-state:narratives:hide-watched';
+const NARRATIVES_GEMS_ONLY_KEY = 'cheesequake:tab-state:narratives:gems-only';
 
 export function Narratives({
   refreshTick,
@@ -60,6 +61,11 @@ export function Narratives({
   const [hideWatched, setHideWatched] = usePersistedState<boolean>(
     NARRATIVES_HIDE_WATCHED_KEY,
     true,
+    { validate: isBoolean },
+  );
+  const [gemsOnly, setGemsOnly] = usePersistedState<boolean>(
+    NARRATIVES_GEMS_ONLY_KEY,
+    false,
     { validate: isBoolean },
   );
 
@@ -111,9 +117,12 @@ export function Narratives({
 
   const themes = data.themes || [];
   const visibleThemes = showAllThemes ? themes : themes.slice(0, 5);
-  const visibleRunning = hideWatched
+  const unwatchedRunning = hideWatched
     ? data.running.filter((r) => !(r.watched || watchedSet.has(r.mint)))
     : data.running;
+  const visibleRunning = gemsOnly
+    ? unwatchedRunning.filter((r) => r.gem)
+    : unwatchedRunning;
   const calEmpty = `No results yet. The tool checks each coin's price 1, 6 and 24 hours later.${
     data.calibration.missed ? ` Missed: ${data.calibration.missed}.` : ''
   }`;
@@ -172,15 +181,26 @@ export function Narratives({
           subtitle="Coins that passed every safety check in the last 30 minutes, best score first. The score is out of 100 and counts good signs. It is not a prediction."
           className={highlightClass}
           action={
-            <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={hideWatched}
-                onChange={(e) => setHideWatched(e.target.checked)}
-                className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
-              />
-              Hide watched
-            </label>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={gemsOnly}
+                  onChange={(e) => setGemsOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
+                />
+                Early gems only
+              </label>
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-[#cfc3b4] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideWatched}
+                  onChange={(e) => setHideWatched(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#2d251d] bg-[#211c16] accent-[#e59a28] cursor-pointer"
+                />
+                Hide watched
+              </label>
+            </div>
           }
         >
           {data.running.length === 0 ? (
@@ -189,7 +209,9 @@ export function Narratives({
             </p>
           ) : visibleRunning.length === 0 ? (
             <p className="text-sm text-[#cfc3b4]">
-              All currently running coins are watched. Turn off &ldquo;Hide watched&rdquo; to view them.
+              {gemsOnly
+                ? <>No early gems right now. Turn off &ldquo;Early gems only&rdquo; to see every running coin.</>
+                : <>All currently running coins are watched. Turn off &ldquo;Hide watched&rdquo; to view them.</>}
             </p>
           ) : (
             <>
@@ -233,6 +255,7 @@ export function Narratives({
                               <AddressLink address={r.mint} />
                             </strong>
                           )}
+                          {r.gem && <Badge tone="good">Early gem</Badge>}
                         </div>
                         <p className="mt-0.5 text-xs text-[#cfc3b4]">
                           {r.theme || 'no theme'}
@@ -360,6 +383,7 @@ export function Narratives({
                                   <AddressLink address={r.mint} />
                                 </strong>
                               )}
+                              {r.gem && <Badge tone="good">Early gem</Badge>}
                             </div>
                           </td>
                           <td className="py-3 px-3 align-middle text-[#f4ede2]/90 whitespace-nowrap">
