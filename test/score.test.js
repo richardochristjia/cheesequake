@@ -458,6 +458,50 @@ test('missing DexScreener image is filled from GeckoTerminal tokens/multi, cheap
   assert.equal(runningNow(db, NOW).find((r) => r.mint === MINT).image_url, 'https://img.example/m.png');
 });
 
+const trendRow = (db, m, b) => db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6) VALUES (?, 'trending', ?, ?, 400)").run(NOWS - 60, m, b);
+
+test('a DexScreener image is kept and tokens/multi is not asked for it', async () => {
+  const db = openDb(':memory:');
+  trendRow(db, MINT, 150);
+  const asked = [];
+  const geckoGet = async (url) => {
+    if (!url.includes('/tokens/multi/')) return { data: [] };
+    asked.push(url);
+    return { data: [{ id: 'solana_' + MINT, attributes: { address: MINT, image_url: 'https://gecko.example/x.png' } }] };
+  };
+  const { deps } = universeDeps(db, { geckoGet, pairOf: (m) => pair(m, { info: { imageUrl: 'https://dex.example/i.png' } }) });
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.equal(asked.length, 0);
+  assert.equal(runningNow(db, NOW)[0].image_url, 'https://dex.example/i.png');
+});
+
+test('a stored image is not re-requested from tokens/multi', async () => {
+  const db = openDb(':memory:');
+  trendRow(db, MINT, 150);
+  db.prepare('INSERT INTO tokens(mint, symbol, name, first_seen, image_url) VALUES (?,?,?,?,?)').run(MINT, 'T', 'T', NOWS - 999, 'https://old.example/i.png');
+  const asked = [];
+  const geckoGet = async (url) => { if (url.includes('/tokens/multi/')) asked.push(url); return { data: [] }; };
+  const { deps } = universeDeps(db, { geckoGet });
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.equal(asked.length, 0);
+});
+
+test('pools/multi fills null DexScreener liquidity even when buyers are already known', async () => {
+  const db = openDb(':memory:');
+  trendRow(db, MINT, 150);
+  const pool = addr('P');
+  const geckoGet = async (url) => (url.includes('/pools/multi/') ? { data: [{
+    id: 'solana_' + pool,
+    attributes: { address: pool, reserve_in_usd: '45000', volume_usd: { h1: '700', h6: '2100' }, price_change_percentage: { h1: '12' },
+      transactions: { h1: { buys: 30, sells: 10, buyers: 25 }, h6: { buyers: 90 } } },
+    relationships: { base_token: { data: { id: 'solana_' + MINT } } },
+  }] } : { data: [] });
+  const { deps } = universeDeps(db, { geckoGet, pairOf: (m) => pair(m, { liquidity: undefined, pairAddress: pool }) });
+  await runCandidates({ db, deps, now: () => NOW });
+  const s = db.prepare("SELECT liquidity_usd, buyers_h1 FROM pool_snapshots WHERE source = 'candidate' AND mint = ?").get(MINT);
+  assert.deepEqual({ ...s }, { liquidity_usd: 45000, buyers_h1: 150 });
+});
+
 // Seeds one listed candidate plus its 'candidate' snapshot rows; `snap: null` seeds no snapshot.
 function gemRow(over = {}, db = openDb(':memory:')) {
   const { mcap = 100000, snap = {} } = over;
