@@ -94,7 +94,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   const nowS = Math.floor(nowMs / 1000);
   runThemes({ db, now: nowMs, config });
 
-  // 1. Universe, discovery mints first (tracked-wallet, trending, active new pools, boosts/profiles), then watched mints, capped at 60.
+  // 1. Universe, watched mints first, then discovery mints (tracked-wallet, trending, active new pools, boosts/profiles), capped at 60.
   const watched = watchedMints(db);
   const watchedSet = new Set(watched);
   const tr = tracked.length ? db.prepare(
@@ -106,7 +106,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   const listings = [...(await safe(() => boosts(deps.dexGet), [])), ...(await safe(() => profiles(deps.dexGet), []))];
   const extra = listings.map((x) => x.mint);
   const descOf = new Map(listings.filter((x) => x.description).map((x) => [x.mint, x.description]));
-  const universe = [...new Set([...tr, ...trending, ...newPools, ...extra, ...watched])].filter(Boolean).slice(0, 60);
+  const universe = [...new Set([...watched, ...tr, ...trending, ...newPools, ...extra])].filter(Boolean).slice(0, 60);
   if (!universe.length) return [];
 
   // 2. Market data. If this source is down the whole cycle is skipped (nothing to score).
