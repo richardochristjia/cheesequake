@@ -3,7 +3,7 @@ import { evaluate, CHEAP, isBondingCurve, top10Pct } from './vetoes.js';
 import { scorecardFor } from './scorecard.js';
 import { runThemes, themeOf } from './themes.js';
 import { tokenBatch, boosts, profiles } from './sources/dexscreener.js';
-import { poolsMulti } from './sources/geckoterminal.js';
+import { poolsMulti, tokensMulti } from './sources/geckoterminal.js';
 import { fetchReport } from './sources/rugcheck.js';
 import { scheduleOutcomes } from './outcomes.js';
 import { storeSnapshots, upsertTokens } from './market.js';
@@ -143,6 +143,15 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     m.buyers_h1 = b?.buyers_h1 ?? null;
     m.buyers_h6 = b?.buyers_h6 ?? null;
     if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen, image_url) VALUES (?,?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description, image_url = COALESCE(excluded.image_url, tokens.image_url)').run(mint, m.symbol, m.name, descOf.get(mint), nowS, m.image_url ?? null);
+  }
+  // Image fallback: only for mints that will reach upsertTokens (watched or not cheap-vetoed) and have no image yet.
+  const need = [...markets.values()].filter((m) => !m.image_url
+    && (watchedSet.has(m.mint) || !evaluate({ market: m, now: nowMs, names: CHEAP, config }).vetoes.length)
+    && !db.prepare('SELECT image_url FROM tokens WHERE mint = ?').get(m.mint)?.image_url);
+  for (let i = 0; i < need.length; i += 30) {
+    for (const t of await safe(() => tokensMulti(deps.geckoGet, need.slice(i, i + 30).map((m) => m.mint)), [])) {
+      if (markets.has(t.mint)) markets.get(t.mint).image_url = t.image_url;
+    }
   }
   storeSnapshots(db, [...markets.values()], 'candidate', nowS);
 

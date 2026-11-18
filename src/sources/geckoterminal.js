@@ -43,3 +43,12 @@ export const trendingPools = async (get) => list(await get(`${BASE}/trending_poo
 // Not probed against the live API: callers treat a failure or odd shape as "unknown".
 export const poolsMulti = async (get, addresses) =>
   list(await get(`${BASE}/pools/multi/${addresses.join(',')}`));
+// Not probed beyond one manual check; odd bodies give [] or skip rows. Null and "missing" placeholders give no image.
+export const tokensMulti = async (get, addresses) => {
+  const body = await get(`${BASE}/tokens/multi/${addresses.join(',')}`);
+  return (Array.isArray(body?.data) ? body.data : []).map((t) => {
+    const a = t?.attributes || {};
+    const url = typeof a.image_url === 'string' && !/missing/i.test(a.image_url) ? a.image_url : null;
+    return { mint: a.address ?? t?.id?.replace(/^solana_/, '') ?? null, image_url: url };
+  }).filter((x) => x.mint && x.image_url);
+};
