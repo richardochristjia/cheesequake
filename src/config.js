@@ -14,8 +14,9 @@ export const config = Object.freeze({
   index: { windowHours: 720, warmupHours: 168 },
   veto: {
     minLiquidityUsd: 10000, minAgeMinutes: 5, minLpLockedPct: 80, maxTop10Pct: 25,
-    maxInsiderPct: 20, washMinBuyers: 10, washVolumeUsd: 50000,
+    maxInsiderPct: 20, washMinBuyers: 10, washVolumeUsd: 50000, minBuyersH1: 10,
   },
+  universe: { cap: 60, newPools: 15, wallets: 15 }, // slots per source in the candidate universe
   consensus: { wallets: 3, windowMinutes: 60 },
   scorecard: { sniperHoldSeconds: 300, minHolds: 3, ratedTrades: 10 },
   weights: { wallets: 20, health: 25, deployer: 10, liquidity: 15, momentum: 25, narrative: 5 },

@@ -32,6 +32,7 @@ test('each veto fires on its own input', () => {
     liquidity: [{ liquidity_usd: 500 }, {}],
     age: [{ created_at: NOW / 1000 - 120 }, {}],
     wash: [{ buyers_h1: 5, vol_h1: 90000 }, {}],
+    inactive: [{ buyers_h1: 3 }, {}],
   };
   for (const [name, [m, r]] of Object.entries(cases)) assert.ok(run(m, r).vetoes.includes(name), name);
 });
@@ -70,4 +71,12 @@ test('bonding curve is exempt from lp_unlocked only', () => {
 
 test('names limits the rules run', () => {
   assert.deepEqual(run({ liquidity_usd: 1 }, null, null, ['liquidity']), { vetoes: ['liquidity'], unknowns: [] });
+});
+
+test('inactive: pass at 25 buyers, falls back to buys_h1, unknown when both are null', () => {
+  const v = (o) => run(o, {}, null, ['inactive']);
+  assert.deepEqual(v({ buyers_h1: 25 }), { vetoes: [], unknowns: [] });
+  assert.deepEqual(v({ buyers_h1: null, buys_h1: 3 }).vetoes, ['inactive']);
+  assert.deepEqual(v({ buyers_h1: null, buys_h1: 30 }), { vetoes: [], unknowns: [] });
+  assert.deepEqual(v({ buyers_h1: null, buys_h1: null }).unknowns, ['inactive']);
 });

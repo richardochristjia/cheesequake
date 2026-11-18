@@ -120,6 +120,7 @@ export const UNKNOWNS: Record<string, string> = {
   liquidity: 'easy to sell',
   age: 'coin age check',
   wash: 'fake volume check',
+  inactive: 'recent buyer count',
   wallets: 'wallets you follow',
   health: 'buyer health',
   deployer: 'creator',

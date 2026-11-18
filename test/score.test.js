@@ -267,7 +267,7 @@ test('runCandidates includes active new pools, prioritizes watched over discover
   const watchedOld = addr('W');
 
   const ts = NOWS - 30;
-  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'new',?,15,20,25000)").run(ts, activeNew);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'new',?,25,20,25000)").run(ts, activeNew);
   db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'new',?,2,5,25000)").run(ts, inactiveNew);
   db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, youngPass);
   db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6, liquidity_usd) VALUES (?,'trending',?,20,40,30000)").run(ts, tooYoung);
@@ -341,4 +341,89 @@ test('walletFacts decays tracked-wallet buy weight by recency over 24h', async (
   const recentPts = await makeRun(3600);
   const stalePts = await makeRun(23 * 3600);
   assert.ok(recentPts > stalePts, `expected recent wallet points (${recentPts}) > stale (${stalePts})`);
+});
+
+// --- universe, activity gate, GeckoTerminal fill ---
+const pair = (mint, o = {}) => ({
+  chainId: 'solana', dexId: 'raydium', pairAddress: addr('P'), baseToken: { address: mint, symbol: 'T', name: 'T' }, priceUsd: '0.01',
+  txns: { h1: { buys: 300, sells: 200 } }, volume: { h1: 20000, h6: 60000, h24: 90000 }, priceChange: { h1: 1 },
+  liquidity: { usd: 60000 }, fdv: 500000, marketCap: 500000, pairCreatedAt: (NOWS - 6 * 3600) * 1000, ...o,
+});
+const mk = (prefix, n) => Array.from({ length: n }, (_, i) => {
+  const mint = `${prefix}${String(i).padStart(3, '0')}` + '1'.repeat(36);
+  return mint;
+});
+const trade = (db, wallet, mint, side, ts, sig) =>
+  db.prepare('INSERT INTO trades(wallet, mint, side, token_amount, quote_usd, ts, sig) VALUES (?,?,?,?,?,?,?)').run(wallet, mint, side, 1000, 100, ts, sig);
+function universeDeps(db, { pairOf = (m) => pair(m), geckoGet = async () => ({ data: [] }) } = {}) {
+  const requested = [];
+  const dexGet = async (url) => {
+    if (!url.includes('/tokens/v1/solana/')) return [];
+    const mints = url.split('/tokens/v1/solana/')[1].split(',');
+    requested.push(...mints);
+    return mints.map((m) => pairOf(m));
+  };
+  return { requested, deps: { dexGet, geckoGet, rugGet: goodRaw(), rpc: { mintInfo: async () => info } } };
+}
+
+test('universe scores every trending mint and skips mints bought only by weight-0 wallets', async () => {
+  const db = openDb(':memory:');
+  const sniper = addr('S');
+  const sniperMints = mk('S', 80);
+  const trending = mk('T', 20);
+  // sniper: buy then sell within 60s on 3+ mints, so its weight is 0
+  sniperMints.forEach((m, i) => { trade(db, sniper, m, 'buy', NOWS - 1000 - i, `b${i}`); trade(db, sniper, m, 'sell', NOWS - 960 - i, `s${i}`); });
+  for (const m of trending) db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6) VALUES (?, 'trending', ?, 150, 400)").run(NOWS - 60, m);
+  const { requested, deps } = universeDeps(db);
+  await runCandidates({ db, deps, tracked: [sniper], now: () => NOW });
+  for (const m of trending) assert.ok(requested.includes(m), 'trending mint requested');
+  assert.ok(!sniperMints.some((m) => requested.includes(m)), 'sniper-only mints never enter the universe');
+});
+
+test('universe ranks wallet mints by weighted buying wallets', async () => {
+  const db = openDb(':memory:');
+  const [w1, w2] = [addr('A'), addr('B')];
+  const many = addr('X');
+  const few = addr('Y');
+  trade(db, w1, many, 'buy', NOWS - 100, 'a1'); trade(db, w2, many, 'buy', NOWS - 200, 'a2');
+  trade(db, w1, few, 'buy', NOWS - 50, 'a3'); // newer, but one wallet
+  const fillers = mk('F', 59);
+  for (const m of fillers) db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6) VALUES (?, 'trending', ?, 150, 400)").run(NOWS - 60, m);
+  const { requested, deps } = universeDeps(db);
+  await runCandidates({ db, deps, tracked: [w1, w2], now: () => NOW });
+  assert.equal(requested.length, 60);
+  assert.ok(requested.includes(many), 'two-wallet mint takes the last slot');
+  assert.ok(!requested.includes(few), 'one-wallet mint is cut');
+});
+
+test('a dead watched coin is still listed, a dead non-watched coin is vetoed inactive', async () => {
+  const db = openDb(':memory:');
+  const watchedDead = addr('W');
+  const dead = addr('D');
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(watchedDead, NOWS - 10);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, mint, buyers_h1, buyers_h6) VALUES (?, 'trending', ?, 2, 5)").run(NOWS - 60, dead);
+  const { deps } = universeDeps(db, { pairOf: (m) => pair(m, { txns: { h1: { buys: 0, sells: 0 } }, liquidity: undefined }) });
+  await runCandidates({ db, deps, now: () => NOW });
+  const w = db.prepare('SELECT * FROM candidates WHERE mint = ?').get(watchedDead);
+  assert.equal(w.listed, 1);
+  assert.ok(!w.unknowns.includes('inactive'));
+  const d = db.prepare('SELECT * FROM candidates WHERE mint = ?').get(dead);
+  assert.equal(d.listed, 0);
+  assert.match(d.vetoes, /inactive/);
+});
+
+test('null DexScreener liquidity, volume and change are filled from GeckoTerminal pools/multi', async () => {
+  const db = openDb(':memory:');
+  const pool = addr('P');
+  const geckoGet = async (url) => (url.includes('/pools/multi/') ? { data: [{
+    id: 'solana_' + pool,
+    attributes: { address: pool, name: 'T / SOL', reserve_in_usd: '45000', volume_usd: { h1: '700', h6: '2100' }, price_change_percentage: { h1: '12' },
+      transactions: { h1: { buys: 30, sells: 10, buyers: 25 }, h6: { buyers: 90 } } },
+    relationships: { base_token: { data: { id: 'solana_' + MINT } } },
+  }] } : { data: [] });
+  const { deps } = universeDeps(db, { geckoGet, pairOf: (m) => pair(m, { liquidity: undefined, volume: undefined, priceChange: undefined, pairAddress: pool }) });
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(MINT, NOWS - 10);
+  await runCandidates({ db, deps, now: () => NOW });
+  const s = db.prepare("SELECT liquidity_usd, vol_h1, vol_h6, chg_h1, buyers_h1 FROM pool_snapshots WHERE source = 'candidate' AND mint = ?").get(MINT);
+  assert.deepEqual({ ...s }, { liquidity_usd: 45000, vol_h1: 700, vol_h6: 2100, chg_h1: 12, buyers_h1: 25 });
 });

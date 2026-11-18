@@ -175,6 +175,7 @@ describe('Cheesequake UI', () => {
       'liquidity',
       'age',
       'wash',
+      'inactive',
       'wallets',
       'health',
       'deployer',

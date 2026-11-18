@@ -94,19 +94,30 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   const nowS = Math.floor(nowMs / 1000);
   runThemes({ db, now: nowMs, config });
 
-  // 1. Universe, watched mints first, then discovery mints (tracked-wallet, trending, active new pools, boosts/profiles), capped at 60.
+  // 1. Universe, watched mints first, then trending, then per-source shares of active new pools and weighted-wallet mints, boosts/profiles, leftovers; capped.
   const watched = watchedMints(db);
   const watchedSet = new Set(watched);
-  const tr = tracked.length ? db.prepare(
-    `SELECT DISTINCT mint FROM trades WHERE side = 'buy' AND ts > ? AND wallet IN (${tracked.map(() => '?').join(',')})`).all(nowS - 86400, ...tracked).map((r) => r.mint) : [];
+  const weightOf = new Map(tracked.map((w) => [w, scorecardFor(db, w, config).weight]));
+  const byMint = new Map();
+  const buys = tracked.length ? db.prepare(
+    `SELECT mint, wallet, MAX(ts) last FROM trades WHERE side = 'buy' AND ts > ? AND wallet IN (${tracked.map(() => '?').join(',')}) GROUP BY mint, wallet`).all(nowS - 86400, ...tracked) : [];
+  for (const { mint, wallet, last } of buys) {
+    if (!(weightOf.get(wallet) > 0)) continue;
+    const e = byMint.get(mint) ?? { mint, n: 0, last: 0 };
+    e.n++; e.last = Math.max(e.last, last);
+    byMint.set(mint, e);
+  }
+  const walletMints = [...byMint.values()].sort((a, b) => b.n - a.n || b.last - a.last).map((e) => e.mint);
   const tsT = db.prepare("SELECT MAX(ts) t FROM pool_snapshots WHERE source = 'trending'").get().t;
   const trending = tsT ? db.prepare("SELECT mint FROM pool_snapshots WHERE source = 'trending' AND ts = ?").all(tsT).map((r) => r.mint) : [];
   const tsN = db.prepare("SELECT MAX(ts) t FROM pool_snapshots WHERE source = 'new'").get().t;
-  const newPools = tsN ? db.prepare("SELECT mint FROM pool_snapshots WHERE source = 'new' AND ts = ? AND COALESCE(buyers_h1, 0) >= 10 AND COALESCE(liquidity_usd, 0) >= ?").all(tsN, config.veto.minLiquidityUsd).map((r) => r.mint) : [];
+  const newPools = tsN ? db.prepare("SELECT mint FROM pool_snapshots WHERE source = 'new' AND ts = ? AND COALESCE(buyers_h1, 0) >= ? AND COALESCE(liquidity_usd, 0) >= ? ORDER BY buyers_h1 DESC, rowid").all(tsN, config.veto.minBuyersH1, config.veto.minLiquidityUsd).map((r) => r.mint) : [];
   const listings = [...(await safe(() => boosts(deps.dexGet), [])), ...(await safe(() => profiles(deps.dexGet), []))];
   const extra = listings.map((x) => x.mint);
   const descOf = new Map(listings.filter((x) => x.description).map((x) => [x.mint, x.description]));
-  const universe = [...new Set([...watched, ...tr, ...trending, ...newPools, ...extra])].filter(Boolean).slice(0, 60);
+  const u = config.universe;
+  const universe = [...new Set([...watched, ...trending, ...newPools.slice(0, u.newPools), ...walletMints.slice(0, u.wallets), ...extra,
+    ...newPools.slice(u.newPools), ...walletMints.slice(u.wallets)])].filter(Boolean).slice(0, u.cap);
   if (!universe.length) return [];
 
   // 2. Market data. If this source is down the whole cycle is skipped (nothing to score).
@@ -119,13 +130,16 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
       || (tsN && db.prepare("SELECT buyers_h1, buyers_h6 FROM pool_snapshots WHERE source = 'new' AND ts = ? AND mint = ?").get(tsN, mint));
     if (s && s.buyers_h1 != null) buyersOf.set(mint, s);
   }
-  const missing = [...markets.values()].filter((m) => !buyersOf.has(m.mint) && m.pool);
+  const FILL = ['liquidity_usd', 'vol_h1', 'vol_h6', 'chg_h1'];
+  const missing = [...markets.values()].filter((m) => m.pool && (!buyersOf.has(m.mint) || FILL.some((k) => m[k] == null)));
+  const geckoOf = new Map();
   for (let i = 0; i < missing.length; i += 30) {
     const pools = await safe(() => poolsMulti(deps.geckoGet, missing.slice(i, i + 30).map((m) => m.pool)), []);
-    for (const p of pools) if (p.mint && p.buyers_h1 != null) buyersOf.set(p.mint, p);
+    for (const p of pools) if (p.mint) { geckoOf.set(p.mint, p); if (p.buyers_h1 != null && !buyersOf.has(p.mint)) buyersOf.set(p.mint, p); }
   }
   for (const [mint, m] of markets) {
     const b = buyersOf.get(mint);
+    for (const k of FILL) m[k] ??= geckoOf.get(mint)?.[k] ?? null;
     m.buyers_h1 = b?.buyers_h1 ?? null;
     m.buyers_h6 = b?.buyers_h6 ?? null;
     if (descOf.has(mint)) db.prepare('INSERT INTO tokens(mint, symbol, name, description, first_seen, image_url) VALUES (?,?,?,?,?,?) ON CONFLICT(mint) DO UPDATE SET description = excluded.description, image_url = COALESCE(excluded.image_url, tokens.image_url)').run(mint, m.symbol, m.name, descOf.get(mint), nowS, m.image_url ?? null);
@@ -149,8 +163,9 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 
     // 6. Remaining vetoes.
     const rest = evaluate({ market: m, report, mintInfo, now: nowMs, names: undefined, config });
-    const vetoes = [...new Set([...cheap.vetoes, ...rest.vetoes])];
-    const unknowns = [...new Set([...cheap.unknowns, ...rest.unknowns])];
+    const exempt = (xs) => (watchedSet.has(mint) ? xs.filter((v) => v !== 'inactive') : xs);
+    const vetoes = exempt([...new Set([...cheap.vetoes, ...rest.vetoes])]);
+    const unknowns = exempt([...new Set([...cheap.unknowns, ...rest.unknowns])]);
     if (vetoes.length) { saveCandidate(db, nowS, mint, m, { score: 0, band: 'avoid', listed: 0, vetoes, unknowns }); continue; }
 
     // 7-10. Score, cap, band, store.
@@ -202,6 +217,7 @@ function vetoReason(v, snap, rep, config) {
   if (v === 'liquidity') return 'Pool liquidity is below the safety minimum' + (snap?.liquidity_usd != null ? ` (${usd(snap.liquidity_usd)}, min ${usd(config.veto.minLiquidityUsd)})` : '');
   if (v === 'age') return `Coin is newer than the minimum age threshold (${config.veto.minAgeMinutes} min)`;
   if (v === 'wash') return 'Suspected wash trading (high volume with too few buyers)';
+  if (v === 'inactive') return `No recent trading activity (fewer than ${config.veto.minBuyersH1} buyers in the last hour)`;
   return `Safety check failed: ${v}`;
 }
 
