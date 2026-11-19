@@ -317,3 +317,11 @@ test('divergence still fires with a watch row every 60 s since the last buyer ro
   checkExits({ db, tracked: [], now: nowS * 1000 });
   assert.equal(count(db, 'exit_divergence'), 1);
 });
+
+test('refreshWatched runs exit checks: a -18% 5 min drop gives one exit_drop alert', async () => {
+  const db = openDb(':memory:');
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run('MintD', 1);
+  const dexGet = async () => [{ chainId: 'solana', pairAddress: 'PD', baseToken: { address: 'MintD' }, priceUsd: '1', priceChange: { m5: -18 } }];
+  await refreshWatched({ db, dexGet, tracked: [], now: () => 1e12 });
+  assert.equal(count(db, 'exit_drop'), 1);
+});
