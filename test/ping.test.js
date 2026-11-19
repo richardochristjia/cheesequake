@@ -305,3 +305,15 @@ test('divergence still fires when the latest snapshot is a watch row without buy
   checkExits({ db, tracked: [], now: nowS * 1000 });
   assert.equal(count(db, 'exit_divergence'), 1);
 });
+
+test('divergence still fires with a watch row every 60 s since the last buyer row', () => {
+  const db = openDb(':memory:');
+  const mint = addr('M'), nowS = 1_000_000;
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,1)').run(nowS - 600, mint, 70, 'confirm');
+  const snap = db.prepare('INSERT INTO pool_snapshots(ts, source, pool, mint, liquidity_usd, vol_h1, buyers_h1) VALUES (?,?,?,?,?,?,?)');
+  snap.run(nowS - 3930, 'candidate', 'P', mint, 50000, 10000, 50);
+  for (let ts = nowS - 3900; ts < nowS - 300; ts += 60) snap.run(ts, 'watch', 'P', mint, 50000, 15000, null);
+  snap.run(nowS - 300, 'candidate', 'P', mint, 50000, 20000, 20);
+  checkExits({ db, tracked: [], now: nowS * 1000 });
+  assert.equal(count(db, 'exit_divergence'), 1);
+});
