@@ -170,7 +170,7 @@ export function Ping({
                                 {a.symbol}
                               </span>
                             )}
-                            <AddressLink address={a.mint} />
+                            <AddressLink address={a.mint} showDexScreener />
                           </div>
                           <KindTooltip kind={a.kind} />
                         </div>
@@ -233,7 +233,7 @@ export function Ping({
                                   {a.symbol}
                                 </span>
                               )}
-                              <AddressLink address={a.mint} />
+                              <AddressLink address={a.mint} showDexScreener />
                             </span>
                           </td>
                           <td className="py-2.5 pr-3 text-xs">
