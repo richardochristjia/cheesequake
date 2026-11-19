@@ -72,6 +72,7 @@ export function Narratives({
     false,
     { validate: isBoolean },
   );
+  const [openThemes, setOpenThemes] = useState<Set<string>>(() => new Set());
   const [hideWatched, setHideWatched] = usePersistedState<boolean>(
     NARRATIVES_HIDE_WATCHED_KEY,
     true,
@@ -464,7 +465,7 @@ export function Narratives({
       <motion.div variants={staggerItemVariants}>
         <Card
           title="Themes this hour"
-          subtitle="A theme is a word that three or more trending coins share in their name or description. Share is how much of the last hour's trading went to coins with that word."
+          subtitle="A narrative is a word that at least one coin has in its name or symbol and three or more trending coins share. Related words are merged. Clones and one-coin narratives are tagged and give no score points. Share is how much of the last hour's trading went to its coins."
           className={highlightClass}
         >
           {themes.length === 0 ? (
@@ -475,54 +476,112 @@ export function Narratives({
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
-                      <th className="py-2.5 pr-4 text-left">Word</th>
-                      <th className="py-2.5 px-3 text-right w-24">Coins</th>
+                      <th className="py-2.5 pr-4 text-left">Narrative</th>
+                      <th className="py-2.5 px-3 text-right">Coins</th>
                       <th className="py-2.5 px-3 text-right">Traded, 1 h</th>
-                      <th className="py-2.5 pl-3 text-right">Share</th>
+                      <th className="py-2.5 px-3 text-right">Share</th>
+                      <th className="py-2.5 px-3 text-right">Change</th>
+                      <th className="py-2.5 pl-3 text-right">Leader</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2d251d]/70">
-                    {visibleThemes.map((t, idx) => {
+                    {visibleThemes.map((t) => {
                       const sharePct = Math.min(100, Math.max(0, t.share * 100));
+                      const open = openThemes.has(t.keyword);
+                      const toggle = () =>
+                        setOpenThemes((s) => {
+                          const n = new Set(s);
+                          if (!n.delete(t.keyword)) n.add(t.keyword);
+                          return n;
+                        });
+                      const delta = t.prevShare == null ? null : (t.share - t.prevShare) * 100;
+                      const scoreOf = new Map(data.running.map((r) => [r.mint, r.score]));
                       return (
-                        <motion.tr
-                          key={t.keyword}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{
-                            ...FAST_EASE_OUT,
-                            delay: boundedStaggerDelay(idx),
-                          }}
-                          className="hover:bg-[#211c16]/40 transition-colors"
-                        >
-                        <td className="py-2.5 pr-4 font-medium text-[#f4ede2]">
-                          {t.keyword}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
-                          {t.tokens}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
-                          ${fmt(t.volume)}
-                        </td>
-                        <td className="py-2.5 pl-3 text-right">
-                          <div className="inline-flex items-center justify-end gap-2.5">
-                            <div className="hidden sm:block h-1.5 w-20 overflow-hidden rounded-full bg-[#110e0b]">
-                              <div
-                                className="h-full rounded-full bg-[#e59a28]"
-                                style={{ width: `${sharePct}%` }}
-                              />
-                            </div>
-                            <span className="tabular-nums text-sm text-[#f4ede2]/90 w-12 text-right">
-                              {fmt(t.share * 100, 1)}%
-                            </span>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        <Fragment key={t.keyword}>
+                          <tr
+                            tabIndex={0}
+                            aria-expanded={open}
+                            onClick={toggle}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggle();
+                              }
+                            }}
+                            className="cursor-pointer hover:bg-[#211c16]/40 transition-colors"
+                          >
+                            <td className="py-2.5 pr-4 font-medium text-[#f4ede2]">
+                              {t.keyword}
+                              {t.aliases.length > 0 && (
+                                <span className="ml-2 text-xs font-normal text-[#cfc3b4]">
+                                  {t.aliases.join(', ')}
+                                </span>
+                              )}
+                              {t.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="ml-2 rounded-full border border-[#2d251d] bg-[#211c16] px-2 py-0.5 text-[10px] font-medium text-[#cfc3b4]"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
+                              {t.tokens}
+                              {t.newCoins > 0 && (
+                                <span className="ml-1.5 text-xs text-[#e59a28]">+{t.newCoins} new</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
+                              ${fmt(t.volume)}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="inline-flex items-center justify-end gap-2.5">
+                                <div className="hidden sm:block h-1.5 w-20 overflow-hidden rounded-full bg-[#110e0b]">
+                                  <div
+                                    className="h-full rounded-full bg-[#e59a28]"
+                                    style={{ width: `${sharePct}%` }}
+                                  />
+                                </div>
+                                <span className="tabular-nums text-sm text-[#f4ede2]/90 w-12 text-right">
+                                  {fmt(t.share * 100, 1)}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums text-[#f4ede2]/90">
+                              {delta == null ? '–' : `${delta >= 0 ? '↑' : '↓'} ${fmt(Math.abs(delta), 1)} pp`}
+                            </td>
+                            <td className="py-2.5 pl-3 text-right text-[#f4ede2]/90">
+                              {t.leader.symbol ?? '—'}
+                            </td>
+                          </tr>
+                          {open && (
+                            <tr>
+                              <td colSpan={6} className="pb-3 pt-1">
+                                <ul className="space-y-1.5 text-xs text-[#cfc3b4]">
+                                  {t.members.map((m) => (
+                                    <li key={m.mint} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                      <span className="font-medium text-[#f4ede2]">{m.symbol ?? '—'}</span>
+                                      <AddressLink address={m.mint} />
+                                      <span className="tabular-nums">${fmt(m.vol_h1)}</span>
+                                      <span className="tabular-nums">
+                                        {m.created_at == null ? '—' : `${fmt((Date.now() / 1000 - m.created_at) / 3600, 1)} h old`}
+                                      </span>
+                                      {scoreOf.has(m.mint) && (
+                                        <span className="tabular-nums">score {fmt(scoreOf.get(m.mint)!)}</span>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             {themes.length > 5 && (
               <motion.button
                 type="button"

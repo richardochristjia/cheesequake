@@ -257,7 +257,11 @@ describe('Cheesequake UI', () => {
         { mint: mintA, symbol: null, theme: null, score: 50, band: 'neutral', mcap_usd: 12000, reasons, unknowns: ['liquidity'] },
         { mint: mintB, symbol: 'SOCKS', theme: 'fees', score: 34, band: 'risk', mcap_usd: 5000, reasons, unknowns: [] },
       ],
-      themes: Array.from({ length: 7 }, (_, i) => ({ keyword: `word${i}`, tokens: 3, volume: 1000 - i, share: 0.2 })),
+      themes: Array.from({ length: 7 }, (_, i) => ({
+        keyword: `word${i}`, aliases: [], tags: [], tokens: 3, volume: 1000 - i, share: 0.2, prevShare: null, newCoins: 0,
+        leader: { mint: `L${i}`, symbol: `LEAD${i}`, vol_h1: 1 },
+        members: [{ mint: `L${i}`, symbol: `MEM${i}`, name: null, vol_h1: 1, created_at: null }],
+      })),
       wallets: [{ address: addr('W'), label: '', class: 'unrated', bought: 1, winRate: null, medianHoldSeconds: null, stillHoldingShare: null }],
       calibration: { rows: [], missed: 0 },
     };
@@ -288,6 +292,13 @@ describe('Cheesequake UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show all 7 themes' }));
     expect(screen.getByText('word6')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show top 5' })).toBeInTheDocument();
+
+    // Theme row expands to members
+    const row = screen.getByText('word0').closest('tr')!;
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('MEM0')).toBeInTheDocument();
 
     // Wallet fallbacks use em-dash + single note
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
@@ -1219,7 +1230,8 @@ describe('Cheesequake UI', () => {
         ],
         themes: Array.from({ length: 7 }, (_, i) => ({
           keyword: `theme${i}`,
-          tokens: 2,
+          aliases: [], tags: [], prevShare: null, newCoins: 0, leader: { mint: 'L', symbol: 'L', vol_h1: 1 }, members: [],
+                    tokens: 2,
           volume: 1000 - i,
           share: 0.15,
         })),
@@ -1359,7 +1371,8 @@ describe('Cheesequake UI', () => {
         running: [],
         themes: Array.from({ length: 6 }, (_, i) => ({
           keyword: `kw${i}`,
-          tokens: 1,
+          aliases: [], tags: [], prevShare: null, newCoins: 0, leader: { mint: 'L', symbol: 'L', vol_h1: 1 }, members: [],
+                    tokens: 1,
           volume: 100,
           share: 0.1,
         })),
@@ -1560,6 +1573,7 @@ describe('Cheesequake UI', () => {
     // 2. App-level CTAs across Narratives, Watch, and Tracer
     const themes = Array.from({ length: 6 }, (_, i) => ({
       keyword: `theme${i + 1}`,
+      aliases: [], tags: [], prevShare: null, newCoins: 0, leader: { mint: 'L', symbol: 'L', vol_h1: 1 }, members: [],
       tokens: 10 - i,
       volume: 100000,
       share: 0.2,

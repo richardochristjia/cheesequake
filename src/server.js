@@ -8,6 +8,7 @@ import { recentHourly, trenchIndex } from './market.js';
 import { runningNow, watchList, enrichAlert } from './score.js';
 import { scorecardFor } from './scorecard.js';
 import { calibration } from './outcomes.js';
+import { currentThemes } from './themes.js';
 
 const DIST_DIR = path.resolve(fileURLToPath(new URL('../public/dist', import.meta.url)));
 
@@ -72,9 +73,8 @@ export function createServer({ db, config, tracer, wallets = () => [], onWatch =
       return { alerts, wallets: wl };
     },
     '/api/narratives': () => {
-      const hour = Math.floor(now() / 1000 / 3600) * 3600;
       return {
-        themes: db.prepare('SELECT keyword, tokens, volume, share FROM theme_hourly WHERE hour = ? ORDER BY volume DESC').all(hour),
+        themes: currentThemes(db, now(), config),
         running: runningNow(db, now(), config),
         wallets: wallets().map((w) => ({ ...w, ...scorecardFor(db, w.address, config) })),
         calibration: calibration(db, config),

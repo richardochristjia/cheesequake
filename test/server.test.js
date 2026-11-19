@@ -22,7 +22,10 @@ async function boot() {
   db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,82,'strong',1,'[]','[{\"part\":\"wallets\",\"points\":20,\"max\":30,\"note\":\"x\"}]','[]',1,1000)").run(NOW / 1000 - 60, mint);
   db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'consensus',?,NULL,'{\"wallets\":[]}','d1')").run(NOW / 1000, mint);
   db.prepare("INSERT INTO alerts(ts, kind, mint, wallet, detail, dedupe) VALUES (?,'exit_wallet',?,NULL,'{}','d2')").run(NOW / 1000, mint);
-  db.prepare('INSERT INTO theme_hourly VALUES (?,?,?,?,?)').run(hr, 'frog', 3, 10, 0.5);
+  for (const [i, nm] of ['Frog a', 'Frog b', 'Frog c'].entries()) {
+    db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, symbol, name, created_at, vol_h1) VALUES (?, 'candidate', ?, ?, ?, ?, ?, 10)")
+      .run(NOW / 1000 - 10, 'p' + i, 'F' + i, 'F' + i, nm, NOW / 1000 - 60);
+  }
   for (let i = 0; i < 200; i++) db.prepare('INSERT INTO market_hourly VALUES (?,?,?,?,?,?,?,?)').run(i * 3600, i % 7, 0.5, i, 1, 0, 50, 'Neutral');
   const tracer = { start: () => ({ status: 'running' }), get: () => ({ status: 'running', nodes: [], edges: [] }) };
   const server = await startServer({ db, config, tracer, wallets: () => [{ address: addr('W'), label: 'w' }], now: () => NOW }, 0);
@@ -43,6 +46,8 @@ test('four API routes and the page serve from a seeded store, on 127.0.0.1 only'
     const n = await j('/api/narratives');
     assert.equal(n.running.length, 1);
     assert.equal(n.themes.length, 1);
+    for (const k of ['keyword', 'aliases', 'tags', 'tokens', 'volume', 'share', 'prevShare', 'newCoins', 'leader', 'members']) assert.ok(k in n.themes[0], k);
+    assert.equal(n.themes[0].newCoins, 3);
     assert.equal(n.wallets.length, 1);
     assert.equal((await j('/api/tracer?wallet=' + addr('W'))).status, 'running');
     assert.equal((await fetch(base + '/api/tracer?wallet=bad')).status, 400);
