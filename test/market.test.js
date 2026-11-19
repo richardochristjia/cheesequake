@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openDb } from '../src/db.js';
 import { newPools } from '../src/sources/geckoterminal.js';
-import { tokenBatch } from '../src/sources/dexscreener.js';
-import { sampleNewPools, snapTrending, rollHourly, trenchIndex } from '../src/market.js';
+import { tokenBatch, parsePair } from '../src/sources/dexscreener.js';
+import { storeSnapshots, sampleNewPools, snapTrending, rollHourly, trenchIndex } from '../src/market.js';
 
 const fx = (n) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), 'utf8'));
 const getFx = (name) => async () => fx(name);
@@ -72,4 +72,13 @@ test('openDb adds v2 columns to an old database and keeps rows', async () => {
   assert.ok(['opportunity', 'risk', 'risk_reasons'].every(c => has('candidates').includes(c)));
   assert.equal(db.prepare('SELECT risk FROM candidates').get().risk, null);
   db.close();
+});
+
+test('parsePair reads priceChange.m5 and storeSnapshots persists it', () => {
+  const p = parsePair({ chainId: 'solana', baseToken: { address: 'M' }, priceChange: { m5: -18 } });
+  assert.equal(p.chg_m5, -18);
+  assert.equal(parsePair({ baseToken: { address: 'M' } }).chg_m5, null);
+  const db = openDb(':memory:');
+  storeSnapshots(db, [p], 'watch', 100);
+  assert.equal(db.prepare('SELECT chg_m5 FROM pool_snapshots').get().chg_m5, -18);
 });

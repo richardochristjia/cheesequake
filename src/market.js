@@ -2,7 +2,7 @@ import { newPools, trendingPools } from './sources/geckoterminal.js';
 import { config } from './config.js';
 
 const COLS = ['pool', 'mint', 'symbol', 'name', 'dex', 'created_at', 'price_usd', 'fdv_usd', 'mcap_usd', 'liquidity_usd',
-  'vol_h1', 'vol_h6', 'vol_h24', 'buys_h1', 'sells_h1', 'buyers_h1', 'buyers_h6', 'chg_h1'];
+  'vol_h1', 'vol_h6', 'vol_h24', 'buys_h1', 'sells_h1', 'buyers_h1', 'buyers_h6', 'chg_h1', 'chg_m5'];
 
 export function storeSnapshots(db, rows, source, ts) {
   const ins = db.prepare(`INSERT INTO pool_snapshots(ts, source, ${COLS.join(',')}) VALUES (?,?,${COLS.map(() => '?').join(',')})`);

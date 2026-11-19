@@ -11,6 +11,7 @@ export const KIND_INFO: Record<string, string> = {
   exit_wallet: 'A tracked wallet sold this coin after it was listed.',
   exit_liquidity:
     'Pool liquidity dropped sharply compared with an earlier snapshot, raising slippage or rug risk.',
+  exit_drop: 'Price fell sharply within five minutes.',
   exit_divergence:
     'Trading volume rose while unique buyers fell — a sign of wash trading or thinning demand.',
 };
