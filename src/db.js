@@ -25,9 +25,13 @@ export function openDb(path) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
-  const cols = db.prepare('PRAGMA table_info(tokens)').all();
-  if (!cols.some(c => c.name === 'image_url')) {
-    db.exec('ALTER TABLE tokens ADD COLUMN image_url');
+  const added = [['tokens', 'image_url'], ['pool_snapshots', 'chg_m5'],
+    ['outcomes', 'max_gain'], ['outcomes', 'max_loss'], ['outcomes', 'path_points'],
+    ['candidates', 'opportunity'], ['candidates', 'risk'], ['candidates', 'risk_reasons']];
+  for (const [table, col] of added) {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col}`);
+    }
   }
   return db;
 }

@@ -55,3 +55,21 @@ test('store collects snapshots, samples and an hourly row', async () => {
   assert.equal(h.trending_vol, 60000);
   assert.equal(h.zone, 'warming up');
 });
+
+test('openDb adds v2 columns to an old database and keeps rows', async () => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const path = join(mkdtempSync(join(tmpdir(), 'cq-')), 'old.db');
+  let db = openDb(path);
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed) VALUES (1,'m',50,'x',1)").run();
+  for (const [t, c] of [['outcomes', 'max_gain'], ['outcomes', 'max_loss'], ['outcomes', 'path_points'], ['pool_snapshots', 'chg_m5'], ['candidates', 'opportunity'], ['candidates', 'risk'], ['candidates', 'risk_reasons']]) db.exec(`ALTER TABLE ${t} DROP COLUMN ${c}`);
+  db.close();
+  db = openDb(path);
+  const has = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+  assert.ok(['max_gain', 'max_loss', 'path_points'].every(c => has('outcomes').includes(c)));
+  assert.ok(has('pool_snapshots').includes('chg_m5'));
+  assert.ok(['opportunity', 'risk', 'risk_reasons'].every(c => has('candidates').includes(c)));
+  assert.equal(db.prepare('SELECT risk FROM candidates').get().risk, null);
+  db.close();
+});
