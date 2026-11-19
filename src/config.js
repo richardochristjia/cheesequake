@@ -26,7 +26,7 @@ export const config = Object.freeze({
   bands: [['strong', 80], ['confirm', 65], ['neutral', 45], ['risk', 25], ['avoid', 0]],
   unknownCap: 79,
   exit: { liquidityDropShare: 0.33, dropM5Pct: -15, dropHoldMinutes: 60 },
-  outcome: { horizonsHours: [1, 6, 24] },
+  outcome: { horizonsHours: [0.25, 1, 6, 24], everyMinutes: 30 },
   tracer: { depth: 4, signatures: 10, top: 2, cacheHours: 24 },
   theme: { minTokens: 3, mergeOverlap: 0.66, cloneShare: 0.5, oneCoinShare: 0.85, newHours: 6 },
   walletPoll: { sigLimit: 100, txLimit: 20, backfillTxLimit: 20 },
