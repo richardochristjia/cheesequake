@@ -17,6 +17,7 @@ const EXPECTED_KINDS = [
   'exit_wallet',
   'exit_liquidity',
   'exit_divergence',
+  'exit_drop',
 ];
 
 function mockFetch(handlers: {
@@ -119,7 +120,7 @@ describe('Cheesequake UI', () => {
     vi.unstubAllGlobals();
   });
 
-  it('KIND_INFO defines plain-English explanations for all 7 alert kinds', () => {
+  it('KIND_INFO defines plain-English explanations for all 8 alert kinds', () => {
     expect(Object.keys(KIND_INFO).sort()).toEqual([...EXPECTED_KINDS].sort());
     for (const kind of EXPECTED_KINDS) {
       expect(typeof KIND_INFO[kind]).toBe('string');

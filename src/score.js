@@ -258,6 +258,7 @@ function exitReason(k, d = {}) {
   if (k === 'exit_liquidity') return 'Sharp liquidity drop detected in the last 24 hours' + (d.from != null && d.to != null ? ` (${usd(d.from)} to ${usd(d.to)})` : '');
   if (k === 'exit_wallet') return 'Tracked wallet sold this coin in the last 24 hours' + (d.usd != null ? ` (${usd(d.usd)})` : '');
   if (k === 'exit_divergence') return 'Volume rose while unique buyers fell in the last 24 hours' + (d.vol != null && d.buyers != null ? ` (${usd(d.vol)} 1h vol, ${d.buyers} buyers)` : '');
+  if (k === 'exit_drop') return `Price fell ${Math.round(-d.chg_m5)}% in 5 minutes`;
   return k;
 }
 
@@ -283,7 +284,7 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
   const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
   const getRep = db.prepare('SELECT json FROM reports WHERE mint = ?');
   const getAlerts = db.prepare('SELECT ts, kind, mint, wallet, detail FROM alerts WHERE mint = ? ORDER BY ts DESC, id DESC LIMIT 50');
-  const getExits = db.prepare("SELECT kind, detail FROM alerts WHERE mint = ? AND ts > ? AND kind LIKE 'exit_%' ORDER BY ts DESC, id DESC");
+  const getExits = db.prepare("SELECT kind, detail, ts FROM alerts WHERE mint = ? AND ts > ? AND kind LIKE 'exit_%' ORDER BY ts DESC, id DESC");
 
   return rows.map(({ mint, added_ts }) => {
     const tok = getTok.get(mint);
@@ -294,6 +295,7 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
     const alerts = getAlerts.all(mint).map((a) => enrichAlert(a, labelOf));
     const exitByKind = new Map();
     for (const r of getExits.all(mint, nowS - 86400)) {
+      if (r.kind === 'exit_drop' && r.ts <= nowS - config.exit.dropHoldMinutes * 60) continue; // short-lived signal
       if (!exitByKind.has(r.kind)) exitByKind.set(r.kind, JSON.parse(r.detail || '{}'));
     }
     const vetoes = cand ? JSON.parse(cand.vetoes || '[]') : [];
@@ -305,14 +307,14 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
 
     const flagVetoes = vetoes.filter((v) => v !== 'age');
     const isFlag = flagVetoes.length > 0 || hasAlert('exit_deployer') || hasAlert('exit_liquidity');
-    const isCaution = !isFlag && (!cand || hasAlert('exit_wallet') || hasAlert('exit_divergence') || vetoes.includes('age') || cand.score < 45 || unknowns.length > 0 || drawdown > 0);
+    const isCaution = !isFlag && (!cand || hasAlert('exit_wallet') || hasAlert('exit_divergence') || hasAlert('exit_drop') || vetoes.includes('age') || cand.score < 45 || unknowns.length > 0 || drawdown > 0);
     const status = isFlag ? 'flag' : isCaution ? 'caution' : 'safe';
     const label = status === 'flag' ? 'Red flag' : status === 'caution' ? 'Caution' : 'Safe to hold';
 
     const reasons = [];
     if (!cand) reasons.push('Waiting for first safety scan');
     for (const v of vetoes) reasons.push(vetoReason(v, snap, rep, config));
-    for (const k of ['exit_deployer', 'exit_liquidity', 'exit_wallet', 'exit_divergence']) {
+    for (const k of ['exit_deployer', 'exit_liquidity', 'exit_wallet', 'exit_divergence', 'exit_drop']) {
       if (hasAlert(k)) reasons.push(exitReason(k, exitByKind.get(k)));
     }
     if (cand && !vetoes.length && cand.score < 45) reasons.push(`Score is low (${cand.score}/100)`);

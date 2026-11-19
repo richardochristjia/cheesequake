@@ -6,7 +6,7 @@ import { createClient } from './http.js';
 import { loadWallets } from './wallets.js';
 import { createRpc } from './sources/solana.js';
 import { sampleNewPools, snapTrending, rollHourly, last } from './market.js';
-import { runWalletCycle, deployerWallets, checkExits } from './ping.js';
+import { runWalletCycle, deployerWallets, checkExits, refreshWatched } from './ping.js';
 import { runCandidates } from './score.js';
 import { fillOutcomes } from './outcomes.js';
 import { startTrace, getTrace, loadLabels } from './tracer.js';
@@ -70,6 +70,8 @@ every('wallets', config.intervals.wallets, async () => {
 }, ['ping', 'watch', 'narratives']);
 every('candidates', config.intervals.candidates, () =>
   runCandidates({ db, deps: { dexGet, geckoGet, rugGet, rpc }, tracked: walletList().map((w) => w.address), now, config }), ['watch', 'narratives']);
+every('watched', config.intervals.watched, () =>
+  refreshWatched({ db, dexGet, tracked: walletList().map((w) => w.address), now, config }), ['watch', 'ping']);
 every('outcomes', config.intervals.outcomes, () => fillOutcomes({ db, dexGet, now }), ['narratives']);
 
 process.on('SIGINT', () => {

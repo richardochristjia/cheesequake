@@ -293,6 +293,18 @@ test('watch: a peak on another pool or outside 2h is ignored, and no history kee
   assert.equal(watchList(priceCoin([1]), NOW)[0].status, 'safe');
 });
 
+test('watch: exit_drop 10 minutes ago is caution with the reason, 90 minutes ago is safe', () => {
+  const at = (age) => {
+    const db = priceCoin([1]);
+    db.prepare("INSERT INTO alerts(ts, kind, mint, detail, dedupe) VALUES (?, 'exit_drop', ?, '{\"chg_m5\":-18}', 'd')").run(NOWS - age, MINT);
+    return watchList(db, NOW)[0];
+  };
+  const hot = at(600);
+  assert.equal(hot.status, 'caution');
+  assert.ok(hot.reasons.includes('Price fell 18% in 5 minutes'));
+  assert.equal(at(5400).status, 'safe');
+});
+
 test('gem: 35% below the 2h peak is false, 10% below is true, no history is true', () => {
   assert.equal(runningNow(priceCoin([1, 0.65]), NOW)[0].gem, false);
   assert.equal(runningNow(priceCoin([1, 0.9]), NOW)[0].gem, true);

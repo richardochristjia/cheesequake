@@ -10,7 +10,7 @@ export const config = Object.freeze({
   labelsPath: 'data/labels.json',
   pace: { geckoterminal: s(3), dexscreener: s(1), rugcheck: s(1), rpc: 500 }, // ms between calls
   retry: { tries: 4, waitsMs: [s(5), s(15), s(45)] },
-  intervals: { newPools: s(60), trending: s(300), candidates: s(300), wallets: s(60), outcomes: s(300) },
+  intervals: { newPools: s(60), trending: s(300), candidates: s(300), wallets: s(60), outcomes: s(300), watched: s(60) },
   index: { windowHours: 720, warmupHours: 168 },
   veto: {
     minLiquidityUsd: 10000, minAgeMinutes: 5, minLpLockedPct: 80, maxTop10Pct: 25,
@@ -25,7 +25,7 @@ export const config = Object.freeze({
   weights: { wallets: 20, health: 31, deployer: 13, liquidity: 19, momentum: 31, narrative: 6 }, // non-wallet parts sum to 100; wallets is a bonus
   bands: [['strong', 80], ['confirm', 65], ['neutral', 45], ['risk', 25], ['avoid', 0]],
   unknownCap: 79,
-  exit: { liquidityDropShare: 0.33 },
+  exit: { liquidityDropShare: 0.33, dropM5Pct: -15, dropHoldMinutes: 60 },
   outcome: { horizonsHours: [1, 6, 24] },
   tracer: { depth: 4, signatures: 10, top: 2, cacheHours: 24 },
   theme: { minTokens: 3, mergeOverlap: 0.66, cloneShare: 0.5, oneCoinShare: 0.85, newHours: 6 },

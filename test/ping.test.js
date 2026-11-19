@@ -2,7 +2,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
-import { runWalletCycle, checkExits, deployerWallets } from '../src/ping.js';
+import { runWalletCycle, checkExits, deployerWallets, refreshWatched } from '../src/ping.js';
 import { tx, fakeRpc, addr } from './helpers.js';
 
 
@@ -259,4 +259,49 @@ test('BUNC replay: exit_liquidity first fires at the 11:15 snapshot', () => {
   const ins = db.prepare(`INSERT INTO pool_snapshots(${Object.keys(rows[0]).join(',')}) VALUES (${Object.keys(rows[0]).map(() => '?').join(',')})`);
   for (const r of rows) { ins.run(...Object.values(r)); checkExits({ db, tracked: [], now: r.ts * 1000 }); }
   assert.equal(db.prepare("SELECT MIN(ts) t FROM alerts WHERE kind = 'exit_liquidity'").get().t, 1795061728);
+});
+
+test('refreshWatched stores one watch snapshot per coin and batches 30 mints per call', async () => {
+  const db = openDb(':memory:');
+  const mints = Array.from({ length: 31 }, (_, i) => `Mint${i}`);
+  for (const m of mints) db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(m, 1);
+  let calls = 0;
+  const dexGet = async (url) => {
+    calls++;
+    return url.split('/').pop().split(',').map((m) => ({ chainId: 'solana', pairAddress: `P${m}`, baseToken: { address: m }, priceUsd: '1' }));
+  };
+  assert.equal(await refreshWatched({ db, dexGet, tracked: [], now: () => 1e12 }), 31);
+  assert.equal(calls, 2);
+  assert.equal(db.prepare("SELECT COUNT(*) c FROM pool_snapshots WHERE source = 'watch'").get().c, 31);
+  assert.equal(await refreshWatched({ db: openDb(':memory:'), dexGet, now: () => 1e12 }), 0);
+});
+
+function dropCoin(chg) {
+  const db = openDb(':memory:');
+  const mint = addr('M'), nowS = 1_000_000;
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,1)').run(nowS - 600, mint, 70, 'confirm');
+  const ins = db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, chg_m5) VALUES (?, 'watch', 'P', ?, ?)");
+  ins.run(nowS - 120, mint, chg); ins.run(nowS - 60, mint, chg);
+  checkExits({ db, tracked: [], now: nowS * 1000 });
+  checkExits({ db, tracked: [], now: nowS * 1000 });
+  return db;
+}
+
+test('exit_drop fires once per hour at -18 and not at -10', () => {
+  const db = dropCoin(-18);
+  assert.equal(count(db, 'exit_drop'), 1);
+  assert.deepEqual(JSON.parse(db.prepare("SELECT detail FROM alerts WHERE kind = 'exit_drop'").get().detail), { chg_m5: -18 });
+  assert.equal(count(dropCoin(-10), 'exit_drop'), 0);
+});
+
+test('divergence still fires when the latest snapshot is a watch row without buyers', () => {
+  const db = openDb(':memory:');
+  const mint = addr('M'), nowS = 1_000_000;
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,1)').run(nowS - 600, mint, 70, 'confirm');
+  const snap = db.prepare('INSERT INTO pool_snapshots(ts, source, pool, mint, liquidity_usd, vol_h1, buyers_h1) VALUES (?,?,?,?,?,?,?)');
+  snap.run(nowS - 3900, 'candidate', 'P', mint, 50000, 10000, 50);
+  snap.run(nowS - 300, 'candidate', 'P', mint, 50000, 20000, 20);
+  snap.run(nowS - 30, 'watch', 'P', mint, 50000, 20000, null);
+  checkExits({ db, tracked: [], now: nowS * 1000 });
+  assert.equal(count(db, 'exit_divergence'), 1);
 });
