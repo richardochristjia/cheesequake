@@ -122,7 +122,7 @@ export function checkExits({ db, tracked, now, config = defaultConfig }) {
     `SELECT wallet, side, ts, quote_usd FROM trades
      WHERE mint = ? AND side IN ('sell','out')
        AND NOT EXISTS (SELECT 1 FROM pending_sigs WHERE sig = 'backfill:' || trades.sig || ':' || trades.mint)`);
-  const snaps = db.prepare('SELECT ts, liquidity_usd, vol_h1, buyers_h1 FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC');
+  const snaps = db.prepare('SELECT ts, pool, liquidity_usd, vol_h1, buyers_h1 FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC');
   for (const { mint, creator } of mints) {
     for (const t of trades.all(mint)) {
       if (t.wallet === creator) fire('exit_deployer', mint, t.wallet, t.ts, { side: t.side, usd: t.quote_usd });
@@ -133,9 +133,12 @@ export function checkExits({ db, tracked, now, config = defaultConfig }) {
     if (!latest) continue;
     const before = all.slice(1).filter((s) => s.ts <= latest.ts - 1800)
       .sort((a, b) => Math.abs(a.ts - (latest.ts - 3600)) - Math.abs(b.ts - (latest.ts - 3600)))[0];
+    const peak = Math.max(0, ...all.slice(1)
+      .filter((s) => s.pool === latest.pool && s.ts >= latest.ts - config.drawdown.windowMinutes * 60 && s.ts < latest.ts)
+      .map((s) => s.liquidity_usd ?? 0));
+    if (latest.liquidity_usd != null && peak > 0 && latest.liquidity_usd <= peak * (1 - config.exit.liquidityDropShare))
+      fire('exit_liquidity', mint, null, latest.ts, { from: peak, to: latest.liquidity_usd });
     if (!before) continue;
-    if (latest.liquidity_usd != null && before.liquidity_usd > 0 && latest.liquidity_usd <= before.liquidity_usd * (1 - config.exit.liquidityDropShare))
-      fire('exit_liquidity', mint, null, latest.ts, { from: before.liquidity_usd, to: latest.liquidity_usd });
     if (latest.vol_h1 != null && before.vol_h1 != null && latest.buyers_h1 != null && before.buyers_h1 != null
         && latest.vol_h1 > before.vol_h1 && latest.buyers_h1 < before.buyers_h1)
       fire('exit_divergence', mint, null, latest.ts, { vol: latest.vol_h1, buyers: latest.buyers_h1 });

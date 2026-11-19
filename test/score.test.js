@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openDb } from '../src/db.js';
 import { upsertTokens } from '../src/market.js';
 import { parsePair } from '../src/sources/dexscreener.js';
+import { config } from '../src/config.js';
+import { checkExits } from '../src/ping.js';
 import { scoreParts, capScore, runCandidates, runningNow, watchedMints, watchList } from '../src/score.js';
 
 const addr = (c) => c.repeat(4) + '1'.repeat(36);
@@ -250,12 +252,73 @@ test('watchList returns latest vol_h24 and image_url with null defaults', () => 
   assert.equal(runCoin.watched, true);
 });
 
-test('scoreParts incorporates chg_h1 in momentum', () => {
-  const flat = scoreParts({ market: market({ chg_h1: 0 }), report: report() });
-  const pumping = scoreParts({ market: market({ chg_h1: 50 }), report: report() });
-  const flatMo = flat.reasons.find((r) => r.part === 'momentum').points;
-  const pumpMo = pumping.reasons.find((r) => r.part === 'momentum').points;
-  assert.ok(pumpMo > flatMo, `expected ${pumpMo} > ${flatMo}`);
+test('scoreParts momentum price-change half is a hump peaking at +25%', () => {
+  // vol_h1 null leaves the price-change half as the whole momentum value
+  const mo = (chg_h1) => scoreParts({ market: market({ vol_h1: null, chg_h1 }), report: report() }).reasons.find((r) => r.part === 'momentum').points;
+  assert.deepEqual([0, 25, 50, 100].map(mo), [0, 31, 15.5, 0]);
+  assert.ok(mo(25) > mo(0) && mo(25) > mo(100));
+  assert.equal(mo(-10), 0);
+});
+
+test('scoreParts momentum with null chg_h1 is the volume pace alone', () => {
+  const mo = (o) => scoreParts({ market: market(o), report: report() }).reasons.find((r) => r.part === 'momentum').points;
+  assert.equal(mo({ chg_h1: null }), mo({ chg_h1: undefined }));
+  assert.equal(mo({ chg_h1: null }), Math.round(0.5 * 31 * 10) / 10); // pace 2 -> 0.5
+});
+
+// Watch and gem: one coin, price history on one pool.
+function priceCoin(prices, { score = 60, pool = addr('P') } = {}) {
+  const db = openDb(':memory:');
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(MINT, 1);
+  const ins = db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, price_usd, mcap_usd, created_at, buyers_h1, buyers_h6, buys_h1, sells_h1) VALUES (?, 'candidate', ?, ?, ?, 100000, ?, 30, 60, 60, 40)");
+  prices.forEach((p, i) => ins.run(NOWS - 60 - (prices.length - 1 - i) * 600, pool, MINT, p, NOWS - 3600));
+  const last = prices.at(-1);
+  db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,?,'neutral',1,'[]','[]','[]',?,100000)").run(NOWS - 60, MINT, score, last);
+  return db;
+}
+
+test('watch: 60% below the 2h peak is caution with a drawdown reason, 40% below is safe', () => {
+  const [bad] = watchList(priceCoin([1, 0.4]), NOW);
+  assert.equal(bad.status, 'caution');
+  assert.ok(bad.reasons.some((r) => r.includes('below its 2h peak') && r.includes('60%')));
+  const [ok] = watchList(priceCoin([1, 0.6]), NOW);
+  assert.equal(ok.status, 'safe');
+});
+
+test('watch: a peak on another pool or outside 2h is ignored, and no history keeps current behaviour', () => {
+  const db = priceCoin([0.4]);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, price_usd) VALUES (?, 'candidate', ?, ?, 1)").run(NOWS - 600, addr('X'), MINT);
+  db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, price_usd) VALUES (?, 'candidate', ?, ?, 1)").run(NOWS - 60 - 7201, addr('P'), MINT);
+  assert.equal(watchList(db, NOW)[0].status, 'safe');
+  assert.equal(watchList(priceCoin([1]), NOW)[0].status, 'safe');
+});
+
+test('gem: 35% below the 2h peak is false, 10% below is true, no history is true', () => {
+  assert.equal(runningNow(priceCoin([1, 0.65]), NOW)[0].gem, false);
+  assert.equal(runningNow(priceCoin([1, 0.9]), NOW)[0].gem, true);
+  assert.equal(runningNow(priceCoin([1]), NOW)[0].gem, true);
+});
+
+test('BUNC replay: watch status and gem badge follow the drop from peak', () => {
+  const rows = JSON.parse(readFileSync(new URL('./fixtures/bunc-snapshots.json', import.meta.url)));
+  const db = openDb(':memory:');
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(rows[0].mint, 1);
+  const ins = db.prepare(`INSERT INTO pool_snapshots(${Object.keys(rows[0]).join(',')}) VALUES (${Object.keys(rows[0]).map(() => '?').join(',')})`);
+  const seen = {};
+  let prev = null;
+  for (const r of rows) {
+    ins.run(...Object.values(r));
+    if (r.ts === prev) continue;
+    prev = r.ts;
+    db.prepare("INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,60,'neutral',1,'[]','[]','[]',?,?)").run(r.ts, r.mint, r.price_usd, r.mcap_usd);
+    checkExits({ db, tracked: [], now: r.ts * 1000 });
+    seen[r.ts] = { status: watchList(db, r.ts * 1000)[0].status, gem: runningNow(db, r.ts * 1000, { ...config, gem: { ...config.gem, maxAgeHours: 1e6 } })[0].gem };
+  }
+  assert.equal(seen[1795061128].status, 'caution'); // 11:05, -51%
+  assert.equal(seen[1795061428].status, 'safe'); // 11:10, -43%
+  for (const ts of [1795061728, 1795062028, 1795062628]) assert.equal(seen[ts].status, 'flag', String(ts)); // liquidity alert exists
+  assert.equal(seen[1795059928].gem, true); // -14%
+  for (const ts of Object.keys(seen).filter((k) => k >= 1795060228)) assert.equal(seen[ts].gem, false, ts);
 });
 
 test('runCandidates includes active new pools, prioritizes watched over discovery, and respects minAgeMinutes=5', async () => {
@@ -430,7 +493,7 @@ test('null DexScreener liquidity, volume and change are filled from GeckoTermina
 
 test('rescaled weights: perfect base parts score 100, wallet bonus stays capped, unknowns cap at 79', () => {
   const perfect = {
-    market: market({ buys_h1: 700, sells_h1: 300, chg_h1: 50, vol_h1: 30000 }),
+    market: market({ buys_h1: 700, sells_h1: 300, chg_h1: 25, vol_h1: 30000 }),
     report: report({ topHolders: [] }),
     theme: { keyword: 'k', share: 0.2, prevShare: 0.1 },
   };

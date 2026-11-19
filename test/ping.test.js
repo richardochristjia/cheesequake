@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { runWalletCycle, checkExits, deployerWallets } from '../src/ping.js';
@@ -229,4 +230,33 @@ test('deployerWallets and checkExits monitor watched coins even when unlisted or
   for (const k of ['exit_wallet', 'exit_deployer', 'exit_liquidity', 'exit_divergence']) {
     assert.equal(count(db, k), 1, k);
   }
+});
+
+// Liquidity exit alert compares against the same pool's 2h peak.
+function liqCoin(rows) {
+  const db = openDb(':memory:');
+  const mint = addr('M'), now = 1_000_000 * 1000, nowS = now / 1000;
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,1)').run(nowS - 600, mint, 70, 'confirm');
+  const snap = db.prepare("INSERT INTO pool_snapshots(ts, source, pool, mint, liquidity_usd) VALUES (?, 'candidate', ?, ?, ?)");
+  for (const [age, pool, liq] of rows) snap.run(nowS - age, pool, mint, liq);
+  checkExits({ db, tracked: [], now });
+  return db;
+}
+
+test('exit_liquidity fires against the same-pool 2h peak', () => {
+  const db = liqCoin([[5400, 'P1', 48688], [3600, 'P1', 40000], [100, 'P1', 31407]]);
+  assert.deepEqual(JSON.parse(db.prepare("SELECT detail FROM alerts WHERE kind = 'exit_liquidity'").get().detail), { from: 48688, to: 31407 });
+});
+
+test('exit_liquidity ignores a high peak on another pool', () => {
+  assert.equal(count(liqCoin([[3600, 'P1', 31000], [3500, 'P2', 100000], [100, 'P1', 31407]]), 'exit_liquidity'), 0);
+});
+
+test('BUNC replay: exit_liquidity first fires at the 11:15 snapshot', () => {
+  const rows = JSON.parse(readFileSync(new URL('./fixtures/bunc-snapshots.json', import.meta.url)));
+  const db = openDb(':memory:');
+  db.prepare('INSERT INTO candidates(ts, mint, score, band, listed) VALUES (?,?,?,?,1)').run(rows[0].ts, rows[0].mint, 60, 'neutral');
+  const ins = db.prepare(`INSERT INTO pool_snapshots(${Object.keys(rows[0]).join(',')}) VALUES (${Object.keys(rows[0]).map(() => '?').join(',')})`);
+  for (const r of rows) { ins.run(...Object.values(r)); checkExits({ db, tracked: [], now: r.ts * 1000 }); }
+  assert.equal(db.prepare("SELECT MIN(ts) t FROM alerts WHERE kind = 'exit_liquidity'").get().t, 1795061728);
 });
