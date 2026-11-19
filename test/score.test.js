@@ -9,7 +9,7 @@ import { upsertTokens } from '../src/market.js';
 import { parsePair } from '../src/sources/dexscreener.js';
 import { config } from '../src/config.js';
 import { checkExits } from '../src/ping.js';
-import { scoreParts, capScore, runCandidates, runningNow, watchedMints, watchList } from '../src/score.js';
+import { scoreParts, opportunityRisk, capScore, runCandidates, runningNow, watchedMints, watchList } from '../src/score.js';
 
 const addr = (c) => c.repeat(4) + '1'.repeat(36);
 const NOW = 2_000_000_000_000;
@@ -630,4 +630,42 @@ test('gem: duplicate candidate snapshot rows give one running row, judged by the
   const rows = runningNow(db, NOW);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].gem, true);
+});
+
+test('opportunityRisk: pump-and-fade has Risk >= 60, steady coin Risk <= 25', () => {
+  const fade = opportunityRisk({
+    market: market({ liquidity_usd: 20000, mcap_usd: 500000, chg_h1: 120, chg_m5: -20, price_usd: 0.42 }),
+    report: report({ topHolders: [{ address: 'a', owner: 'o', pct: 24 }] }), peak: 1,
+  });
+  const steady = opportunityRisk({
+    market: market({ liquidity_usd: 100000, mcap_usd: 500000, chg_h1: 10, chg_m5: 0, price_usd: 1 }),
+    report: report({ topHolders: [{ address: 'a', owner: 'o', pct: 12 }] }), peak: 1,
+  });
+  assert.ok(fade.risk >= 60, `fade risk ${fade.risk}`);
+  assert.ok(steady.risk <= 25, `steady risk ${steady.risk}`);
+  assert.equal(fade.riskReasons[0].points >= fade.riskReasons.at(-1).points, true);
+  assert.ok(fade.opportunity >= 0 && fade.opportunity <= 100);
+});
+
+test('listed candidates store opportunity, risk and risk_reasons; vetoed rows store null; API rows carry them', async () => {
+  const { db, deps } = setup({ rug: goodRaw(), mintInfo: info });
+  await runCandidates({ db, deps, now: () => NOW });
+  const row = db.prepare('SELECT * FROM candidates').get();
+  assert.equal(typeof row.opportunity, 'number');
+  assert.equal(typeof row.risk, 'number');
+  assert.ok(Array.isArray(JSON.parse(row.risk_reasons)));
+  const [run] = runningNow(db, NOW);
+  assert.equal(run.risk, row.risk);
+  assert.ok(Array.isArray(run.risk_reasons));
+  db.prepare('INSERT INTO watched_coins(mint, added_ts) VALUES (?,?)').run(MINT, 1);
+  const w = watchList(db, NOW)[0];
+  assert.equal(w.opportunity, row.opportunity);
+  assert.equal(w.risk, row.risk);
+
+  const v = setup({ rug: goodRaw({ mintAuthority: 'ActiveKey' }), mintInfo: info });
+  await runCandidates({ db: v.db, deps: v.deps, now: () => NOW });
+  const vr = v.db.prepare('SELECT * FROM candidates').get();
+  assert.equal(vr.opportunity, null);
+  assert.equal(vr.risk, null);
+  assert.equal(vr.risk_reasons, null);
 });
