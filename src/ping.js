@@ -148,7 +148,7 @@ export function checkExits({ db, tracked, now, config = defaultConfig }) {
       fire('exit_drop', mint, null, latest.ts, { chg_m5: latest.chg_m5 });
     // DexScreener 'watch' rows carry no buyers, so divergence compares the latest row that has them.
     const latestB = all.find((s) => s.buyers_h1 != null);
-    const before = latestB && all.filter((s) => s !== latestB && s.ts <= latestB.ts - 1800)
+    const before = latestB && all.filter((s) => s !== latestB && s.buyers_h1 != null && s.ts <= latestB.ts - 1800)
       .sort((a, b) => Math.abs(a.ts - (latestB.ts - 3600)) - Math.abs(b.ts - (latestB.ts - 3600)))[0];
     const peak = Math.max(0, ...all.slice(1)
       .filter((s) => s.pool === latest.pool && s.ts >= latest.ts - config.drawdown.windowMinutes * 60 && s.ts < latest.ts)
@@ -156,7 +156,7 @@ export function checkExits({ db, tracked, now, config = defaultConfig }) {
     if (latest.liquidity_usd != null && peak > 0 && latest.liquidity_usd <= peak * (1 - config.exit.liquidityDropShare))
       fire('exit_liquidity', mint, null, latest.ts, { from: peak, to: latest.liquidity_usd });
     if (!before) continue;
-    if (latestB.vol_h1 != null && before.vol_h1 != null && before.buyers_h1 != null
+    if (latestB.vol_h1 != null && before.vol_h1 != null
         && latestB.vol_h1 > before.vol_h1 && latestB.buyers_h1 < before.buyers_h1)
       fire('exit_divergence', mint, null, latestB.ts, { vol: latestB.vol_h1, buyers: latestB.buyers_h1 });
   }
