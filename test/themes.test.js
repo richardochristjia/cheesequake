@@ -76,3 +76,14 @@ test('currentThemes: prevShare via alias, newCoins within 6h; gating of token_th
   assert.equal(themeOf(db, 'd1', now), null);
   assert.equal(db.prepare('SELECT COUNT(*) c FROM theme_hourly WHERE hour = ?').get(hour).c, 2);
 });
+
+test('runThemes: rerun clears token_theme for a theme that turned one coin', () => {
+  const { db, now, s, ins } = seed();
+  [1, 2, 3].forEach((i) => ins('f' + i, 'Frog x', 'F' + i, 100, s - 100000));
+  runThemes({ db, now, config });
+  assert.equal(themeOf(db, 'f1', now).keyword, 'frog');
+  db.prepare("UPDATE pool_snapshots SET vol_h1 = 1 WHERE mint IN ('f2', 'f3')").run();
+  assert.ok(currentThemes(db, now, config).find((x) => x.keyword === 'frog').tags.includes('one coin'));
+  runThemes({ db, now, config });
+  assert.equal(themeOf(db, 'f1', now), null);
+});
