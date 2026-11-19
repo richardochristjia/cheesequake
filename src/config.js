@@ -23,6 +23,8 @@ export const config = Object.freeze({
   consensus: { wallets: 3, windowMinutes: 60 },
   scorecard: { sniperHoldSeconds: 300, minHolds: 3, ratedTrades: 10 },
   weights: { wallets: 20, health: 31, deployer: 13, liquidity: 19, momentum: 31, narrative: 6 }, // non-wallet parts sum to 100; wallets is a bonus
+  opportunity: { weights: { surge: 30, buyShare: 15, volume: 25, price: 20, narrative: 10 }, walletBonus: 10 },
+  risk: { weights: { concentration: 20, insider: 10, thin: 15, drawdown: 20, drop5m: 20, overextension: 10, unknowns: 5 } }, // sum 100
   bands: [['strong', 80], ['confirm', 65], ['neutral', 45], ['risk', 25], ['avoid', 0]],
   unknownCap: 79,
   exit: { liquidityDropShare: 0.33, dropM5Pct: -15, dropHoldMinutes: 60 },

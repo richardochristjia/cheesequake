@@ -11,6 +11,17 @@ import { storeSnapshots, upsertTokens } from './market.js';
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const div = (a, b) => (a == null || b == null || b === 0 ? null : a / b);
 
+// Pure: the raw momentum inputs shared by scoreParts and opportunityRisk.
+export function signals(m, config = defaultConfig) {
+  const surge = div(m.buyers_h1, div(m.buyers_h6, 6));
+  const ratio = div(m.buys_h1, (m.buys_h1 ?? 0) + (m.sells_h1 ?? 0));
+  const mo = div(m.vol_h1, div(m.vol_h6, 6));
+  const volMo = mo == null ? null : clamp((mo - 1) / 2);
+  const { chgPeakPct, chgZeroPct } = config.momentum;
+  const chgMo = m.chg_h1 == null ? null : m.chg_h1 <= chgPeakPct ? clamp(m.chg_h1 / chgPeakPct) : clamp((chgZeroPct - m.chg_h1) / (chgZeroPct - chgPeakPct));
+  return { surge, ratio, volMo, chgMo };
+}
+
 // Pure: turns facts into a score. Each part is 0-1; a part that cannot be computed is 0 and "unknown".
 export function scoreParts({ market: m, report, q = 0, consensus = false, deployerExit = false, theme = null, config = defaultConfig }) {
   const parts = {};
@@ -19,8 +30,7 @@ export function scoreParts({ market: m, report, q = 0, consensus = false, deploy
 
   part('wallets', clamp((q + (consensus ? 1 : 0)) / 4), consensus ? `consensus alert, wallet weight ${q}` : `wallet weight ${q}`);
 
-  const surge = div(m.buyers_h1, div(m.buyers_h6, 6));
-  const ratio = div(m.buys_h1, (m.buys_h1 ?? 0) + (m.sells_h1 ?? 0));
+  const { surge, ratio, volMo, chgMo } = signals(m, config);
   const top10 = top10Pct(report);
   part('health', surge == null || ratio == null || top10 == null ? null
     : (clamp((surge - 0.5) / 1.5) + clamp((ratio - 0.4) / 0.3) + clamp((25 - top10) / 25)) / 3,
@@ -36,10 +46,6 @@ export function scoreParts({ market: m, report, q = 0, consensus = false, deploy
   part('liquidity', depth == null || (!curve && locked == null) ? null
     : curve ? clamp(depth / 0.1) : (clamp(depth / 0.1) + clamp(locked / 100)) / 2, 'liquidity depth and lock');
 
-  const mo = div(m.vol_h1, div(m.vol_h6, 6));
-  const volMo = mo == null ? null : clamp((mo - 1) / 2);
-  const { chgPeakPct, chgZeroPct } = config.momentum;
-  const chgMo = m.chg_h1 == null ? null : m.chg_h1 <= chgPeakPct ? clamp(m.chg_h1 / chgPeakPct) : clamp((chgZeroPct - m.chg_h1) / (chgZeroPct - chgPeakPct));
   const momentumVal = volMo != null && chgMo != null ? (volMo + chgMo) / 2 : (volMo ?? chgMo);
   part('momentum', momentumVal, 'hourly volume pace and 1h price change');
 
@@ -51,6 +57,37 @@ export function scoreParts({ market: m, report, q = 0, consensus = false, deploy
     note: unknowns.includes(p) ? `unknown: ${note}` : note,
   }));
   return { score: Math.min(100, Math.round(Object.entries(parts).reduce((a, [p, { value }]) => a + value * w[p], 0))), reasons, unknowns };
+}
+
+// Pure: opportunity and risk, both 0-100, beside the score (they never set the band). A missing input counts as 0.
+export function opportunityRisk({ market: m, report, theme = null, q = 0, consensus = false, peak = null, unknowns = [], config = defaultConfig }) {
+  const { surge, ratio, volMo, chgMo } = signals(m, config);
+  const ow = config.opportunity.weights;
+  const ov = {
+    surge: surge == null ? 0 : clamp((surge - 0.5) / 1.5), buyShare: ratio == null ? 0 : clamp((ratio - 0.4) / 0.3),
+    volume: volMo ?? 0, price: chgMo ?? 0, narrative: theme ? (theme.share > theme.prevShare ? 1 : 0.5) : 0,
+  };
+  const wallet = clamp((q + (consensus ? 1 : 0)) / 4) * config.opportunity.walletBonus;
+  const opportunity = Math.min(100, Math.round(Object.entries(ov).reduce((a, [k, v]) => a + v * ow[k], 0) + wallet));
+
+  const top10 = top10Pct(report);
+  const supply = report?.supply;
+  const insider = supply ? (report.insiderHolding / supply) * 100 : null;
+  const depth = div(m.liquidity_usd, m.mcap_usd);
+  const f = {
+    concentration: top10 == null ? 0 : clamp((top10 - 10) / 15),
+    insider: insider == null ? 0 : clamp(insider / 20),
+    thin: depth == null ? 0 : clamp((0.1 - depth) / 0.07),
+    drawdown: peak > 0 && m.price_usd != null ? clamp((1 - m.price_usd / peak - 0.2) / 0.4) : 0,
+    drop5m: m.chg_m5 == null ? 0 : clamp((-m.chg_m5 - 5) / 20),
+    overextension: m.chg_h1 == null ? 0 : clamp((m.chg_h1 - 75) / 125),
+    unknowns: clamp(unknowns.length * 0.25),
+  };
+  const rw = config.risk.weights;
+  const riskReasons = Object.entries(f).map(([factor, v]) => ({ factor, points: Math.round(v * rw[factor] * 10) / 10, max: rw[factor] }))
+    .filter((r) => r.points > 0).sort((a, b) => b.points - a.points);
+  const risk = Math.round(Object.entries(f).reduce((a, [k, v]) => a + v * rw[k], 0));
+  return { opportunity, risk, riskReasons };
 }
 
 export const capScore = (score, unknowns, config = defaultConfig) => (unknowns.length ? Math.min(score, config.unknownCap) : score);
@@ -79,9 +116,10 @@ function walletFacts(db, mint, tracked, nowS, config) {
   return { q, consensus: has('consensus'), deployerExit: has('exit_deployer') };
 }
 
-function saveCandidate(db, ts, mint, m, { score, band, listed, vetoes, reasons = [], unknowns = [] }) {
-  const id = db.prepare('INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd) VALUES (?,?,?,?,?,?,?,?,?,?)')
-    .run(ts, mint, score, band, listed, JSON.stringify(vetoes), JSON.stringify(reasons), JSON.stringify(unknowns), m.price_usd ?? null, m.mcap_usd ?? null).lastInsertRowid;
+function saveCandidate(db, ts, mint, m, { score, band, listed, vetoes, reasons = [], unknowns = [], opportunity = null, risk = null, riskReasons = null }) {
+  const id = db.prepare('INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd, opportunity, risk, risk_reasons) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(ts, mint, score, band, listed, JSON.stringify(vetoes), JSON.stringify(reasons), JSON.stringify(unknowns), m.price_usd ?? null, m.mcap_usd ?? null,
+      opportunity, risk, riskReasons && JSON.stringify(riskReasons)).lastInsertRowid;
   return Number(id);
 }
 
@@ -181,10 +219,13 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
 
     // 7-10. Score, cap, band, store.
     const facts = walletFacts(db, mint, tracked, nowS, config);
-    const s = scoreParts({ market: m, report, ...facts, theme: themeOf(db, mint, nowMs), config });
+    const theme = themeOf(db, mint, nowMs);
+    const s = scoreParts({ market: m, report, ...facts, theme, config });
     const allUnknown = [...new Set([...unknowns, ...s.unknowns])];
     const score = capScore(s.score, allUnknown, config);
-    const id = saveCandidate(db, nowS, mint, m, { score, band: bandOf(score), listed: 1, vetoes: [], reasons: s.reasons, unknowns: allUnknown });
+    const peak = peakPrice(db, mint, m.pool, nowS, config);
+    const or = opportunityRisk({ market: m, report, theme, ...facts, peak, unknowns: allUnknown, config });
+    const id = saveCandidate(db, nowS, mint, m, { score, band: bandOf(score), listed: 1, vetoes: [], reasons: s.reasons, unknowns: allUnknown, ...or });
     scheduleOutcomes(db, id, mint, nowS, config);
     out.push({ mint, score });
   }
@@ -226,6 +267,7 @@ export function runningNow(db, now, config = defaultConfig) {
       reasons: JSON.parse(r.reasons),
       unknowns: JSON.parse(r.unknowns),
       vetoes: JSON.parse(r.vetoes),
+      risk_reasons: r.risk_reasons ? JSON.parse(r.risk_reasons) : [],
     };
   });
 }
@@ -281,7 +323,7 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
   const rows = db.prepare('SELECT mint, added_ts FROM watched_coins ORDER BY added_ts DESC').all();
   const getTok = db.prepare('SELECT symbol, name, creator, image_url FROM tokens WHERE mint = ?');
   const getSnap = db.prepare('SELECT pool, symbol, name, price_usd, mcap_usd, liquidity_usd, vol_h24, ts FROM pool_snapshots WHERE mint = ? ORDER BY ts DESC LIMIT 1');
-  const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
+  const getCand = db.prepare('SELECT ts, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd, opportunity, risk, risk_reasons FROM candidates WHERE mint = ? ORDER BY id DESC LIMIT 1');
   const getRep = db.prepare('SELECT json FROM reports WHERE mint = ?');
   const getAlerts = db.prepare('SELECT ts, kind, mint, wallet, detail FROM alerts WHERE mint = ? ORDER BY ts DESC, id DESC LIMIT 50');
   const getExits = db.prepare("SELECT kind, detail, ts FROM alerts WHERE mint = ? AND ts > ? AND kind LIKE 'exit_%' ORDER BY ts DESC, id DESC");
@@ -340,6 +382,9 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
       vetoes,
       unknowns,
       scoreReasons,
+      opportunity: cand?.opportunity ?? null,
+      risk: cand?.risk ?? null,
+      risk_reasons: cand?.risk_reasons ? JSON.parse(cand.risk_reasons) : [],
       status,
       label,
       reasons,
