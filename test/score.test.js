@@ -74,7 +74,7 @@ test('a clean coin is listed and scheduled for outcomes', async () => {
   const { db, deps } = setup({ rug: goodRaw(), mintInfo: info });
   await runCandidates({ db, deps, now: () => NOW });
   assert.equal(runningNow(db, NOW).length, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) c FROM outcomes').get().c, 3);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM outcomes').get().c, 4);
 });
 
 test('RugCheck outage: unknowns listed, score at most 79, no crash', async () => {
