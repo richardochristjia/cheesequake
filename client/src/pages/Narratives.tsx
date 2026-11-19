@@ -246,11 +246,11 @@ export function Narratives({
                               <strong className="font-semibold text-[#f4ede2]">
                                 {r.symbol}
                               </strong>
-                              <AddressLink address={r.mint} />
+                              <AddressLink address={r.mint} showDexScreener />
                             </>
                           ) : (
                             <strong className="font-semibold text-[#f4ede2]">
-                              <AddressLink address={r.mint} />
+                              <AddressLink address={r.mint} showDexScreener />
                             </strong>
                           )}
                           {r.gem && <Badge tone="good">Early gem</Badge>}
@@ -374,11 +374,11 @@ export function Narratives({
                                   <strong className="font-semibold text-[#f4ede2]">
                                     {r.symbol}
                                   </strong>
-                                  <AddressLink address={r.mint} />
+                                  <AddressLink address={r.mint} showDexScreener />
                                 </>
                               ) : (
                                 <strong className="font-semibold text-[#f4ede2]">
-                                  <AddressLink address={r.mint} />
+                                  <AddressLink address={r.mint} showDexScreener />
                                 </strong>
                               )}
                               {r.gem && <Badge tone="good">Early gem</Badge>}

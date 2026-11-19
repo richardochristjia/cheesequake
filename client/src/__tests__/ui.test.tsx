@@ -2341,6 +2341,161 @@ describe('Cheesequake UI', () => {
     });
   });
 
+  describe('AddressLink DexScreener links', () => {
+    it('renders Solscan, DEX link, and copy button when showDexScreener is true and stops click propagation', () => {
+      const mint = addr('M');
+      const onParentClick = vi.fn();
+
+      render(
+        <div onClick={onParentClick}>
+          <AddressLink address={mint} showDexScreener />
+        </div>,
+      );
+
+      const links = screen.getAllByRole('link');
+      expect(links).toHaveLength(2);
+
+      const [solscanLink, dexLink] = links;
+      expect(solscanLink).toHaveAttribute('href', `https://solscan.io/account/${mint}`);
+      expect(solscanLink).toHaveAttribute('target', '_blank');
+      expect(solscanLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+      expect(dexLink).toHaveTextContent('DEX');
+      expect(dexLink).toHaveAttribute('href', `https://dexscreener.com/solana/${mint}`);
+      expect(dexLink).toHaveAttribute('target', '_blank');
+      expect(dexLink).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(dexLink).toHaveAttribute('aria-label', 'Open on DexScreener');
+      expect(dexLink).toHaveAttribute('title', 'Open on DexScreener');
+
+      expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+
+      fireEvent.click(solscanLink);
+      fireEvent.click(dexLink);
+      expect(onParentClick).not.toHaveBeenCalled();
+    });
+
+    it('omits DEX link by default (wallet mode)', () => {
+      const wallet = addr('W');
+      render(<AddressLink address={wallet} />);
+
+      const links = screen.getAllByRole('link');
+      expect(links).toHaveLength(1);
+      expect(links[0]).toHaveAttribute('href', `https://solscan.io/account/${wallet}`);
+      expect(screen.queryByRole('link', { name: 'Open on DexScreener' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+    });
+
+    it('renders plain text and copy button only for non-base58 addresses even with showDexScreener', () => {
+      render(<AddressLink address="not-base58!" showDexScreener />);
+
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
+    });
+
+    it('renders DexScreener links for token mints in Narratives, Ping, and Watch while keeping wallets Solscan-only', async () => {
+      const mint = addr('T');
+      const wallet = addr('W');
+      globalThis.fetch = mockFetch({
+        narratives: () => ({
+          themes: [],
+          running: [
+            {
+              mint,
+              symbol: 'TOK',
+              name: 'Token Coin',
+              image_url: null,
+              theme: null,
+              score: 82,
+              band: 'strong',
+              mcap_usd: 100000,
+              reasons: [],
+              unknowns: [],
+            },
+          ],
+          wallets: [],
+          calibration: { rows: [], total: 0, pending: 0, missed: 0 },
+        }),
+        ping: () => ({
+          alerts: [
+            {
+              ts: 1700000000,
+              kind: 'buy',
+              mint,
+              wallet,
+              symbol: 'TOK',
+              image_url: null,
+              detail: { usd: 500 },
+            },
+          ],
+          wallets: [],
+        }),
+        watch: () => ({
+          ok: true,
+          coins: [
+            {
+              mint,
+              symbol: 'TOK',
+              name: 'Token Coin',
+              image_url: null,
+              score: 82,
+              band: 'strong',
+              reasons: [],
+              unknowns: [],
+              mcap_usd: 100000,
+              liq_usd: 25000,
+              vol24_usd: 50000,
+              price_usd: 0.01,
+              change24_pct: 5,
+              alerts: [],
+            },
+          ],
+        }),
+      });
+
+      render(<App />);
+
+      // Narratives: uncheck "Hide watched" since TOK is also in watch
+      fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Hide watched/i)).toBeInTheDocument();
+      });
+      const hideWatched = screen.getByLabelText(/Hide watched/i) as HTMLInputElement;
+      if (hideWatched.checked) {
+        fireEvent.click(hideWatched);
+      }
+      await waitFor(() => {
+        const dexLinks = screen.getAllByRole('link', { name: 'Open on DexScreener' });
+        expect(dexLinks.length).toBeGreaterThanOrEqual(1);
+        expect(dexLinks[0]).toHaveAttribute('href', `https://dexscreener.com/solana/${mint}`);
+      });
+
+      // Ping: token mint has DEX link, wallet does not
+      fireEvent.click(screen.getByRole('tab', { name: /Ping/i }));
+      await waitFor(() => {
+        const dexLinks = screen.getAllByRole('link', { name: 'Open on DexScreener' });
+        expect(dexLinks.length).toBeGreaterThanOrEqual(1);
+        for (const link of dexLinks) {
+          expect(link).toHaveAttribute('href', `https://dexscreener.com/solana/${mint}`);
+        }
+      });
+      const pingLinks = screen.getAllByRole('link');
+      expect(
+        pingLinks.some((el) => el.getAttribute('href') === `https://solscan.io/account/${wallet}`),
+      ).toBe(true);
+      expect(
+        pingLinks.some((el) => el.getAttribute('href') === `https://dexscreener.com/solana/${wallet}`),
+      ).toBe(false);
+
+      // Watch: watched coin header has DEX link
+      fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+      await waitFor(() => {
+        const dexLinks = screen.getAllByRole('link', { name: 'Open on DexScreener' });
+        expect(dexLinks.length).toBeGreaterThanOrEqual(1);
+        expect(dexLinks[0]).toHaveAttribute('href', `https://dexscreener.com/solana/${mint}`);
+      });
+    });
+  });
+
   it('Watch Score tile shows band and 6-part breakdown tooltip on hover/focus, handles unknowns & Escape, and omits tooltip when unscanned', async () => {
     const coins: WatchCoin[] = [
       {

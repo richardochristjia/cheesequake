@@ -123,9 +123,11 @@ export async function copyText(text: string): Promise<boolean> {
 export function AddressLink({
   address,
   className = '',
+  showDexScreener = false,
 }: {
   address: string | null | undefined;
   className?: string;
+  showDexScreener?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,10 +184,24 @@ export function AddressLink({
         href={`https://solscan.io/account/${address}`}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
         className={`font-mono text-xs text-[#e59a28] hover:text-[#f4ede2] underline decoration-[#e59a28]/40 underline-offset-2 transition-colors ${className}`}
       >
         {short(address)}
       </a>
+      {showDexScreener && (
+        <a
+          href={`https://dexscreener.com/solana/${address}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Open on DexScreener"
+          title="Open on DexScreener"
+          className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-[#2d251d]/80 text-[#cfc3b4] hover:text-[#f4ede2] hover:bg-[#3a3026] border border-[#3a3026] transition-colors"
+        >
+          DEX
+        </a>
+      )}
       {copyButton}
     </span>
   );

@@ -210,7 +210,7 @@ function WatchCard({
             size="md"
           />
           <h3 className="text-base font-semibold text-[#f4ede2]">{title}</h3>
-          <AddressLink address={coin.mint} />
+          <AddressLink address={coin.mint} showDexScreener />
           <Badge tone={tone}>{label}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2">
