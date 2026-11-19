@@ -101,11 +101,25 @@ export interface RunningCoin {
   reasons: ScoreReason[];
 }
 
+export interface ThemeMember {
+  mint: string;
+  symbol: string | null;
+  name: string | null;
+  vol_h1: number;
+  created_at: number | null;
+}
+
 export interface ThemeRow {
   keyword: string;
+  aliases: string[];
+  tags: string[];
   tokens: number;
   volume: number;
   share: number;
+  prevShare: number | null;
+  newCoins: number;
+  leader: { mint: string; symbol: string | null; vol_h1: number };
+  members: ThemeMember[];
 }
 
 export interface WalletScorecardRow {

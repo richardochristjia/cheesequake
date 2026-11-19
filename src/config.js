@@ -28,7 +28,7 @@ export const config = Object.freeze({
   exit: { liquidityDropShare: 0.33 },
   outcome: { horizonsHours: [1, 6, 24] },
   tracer: { depth: 4, signatures: 10, top: 2, cacheHours: 24 },
-  theme: { minTokens: 3 },
+  theme: { minTokens: 3, mergeOverlap: 0.66, cloneShare: 0.5, oneCoinShare: 0.85, newHours: 6 },
   walletPoll: { sigLimit: 100, txLimit: 20, backfillTxLimit: 20 },
 });
 
