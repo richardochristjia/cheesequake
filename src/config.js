@@ -17,7 +17,9 @@ export const config = Object.freeze({
     maxInsiderPct: 20, washMinBuyers: 10, washVolumeUsd: 50000, minBuyersH1: 10,
   },
   universe: { cap: 60, newPools: 15, wallets: 15 }, // slots per source in the candidate universe
-  gem: { minMcapUsd: 20000, maxMcapUsd: 500000, maxAgeHours: 24, minBuyersH1: 10, minSurge: 2, minBuyShare: 0.55 }, // early-gem badge
+  gem: { minMcapUsd: 20000, maxMcapUsd: 500000, maxAgeHours: 24, minBuyersH1: 10, minSurge: 2, minBuyShare: 0.55, maxDrawdownShare: 0.3 }, // early-gem badge
+  momentum: { chgPeakPct: 25, chgZeroPct: 75 }, // 1h price-change credit peaks at chgPeakPct, is gone by chgZeroPct
+  drawdown: { windowMinutes: 120, cautionShare: 0.5 },
   consensus: { wallets: 3, windowMinutes: 60 },
   scorecard: { sniperHoldSeconds: 300, minHolds: 3, ratedTrades: 10 },
   weights: { wallets: 20, health: 31, deployer: 13, liquidity: 19, momentum: 31, narrative: 6 }, // non-wallet parts sum to 100; wallets is a bonus

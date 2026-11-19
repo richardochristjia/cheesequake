@@ -38,7 +38,8 @@ export function scoreParts({ market: m, report, q = 0, consensus = false, deploy
 
   const mo = div(m.vol_h1, div(m.vol_h6, 6));
   const volMo = mo == null ? null : clamp((mo - 1) / 2);
-  const chgMo = m.chg_h1 == null ? null : clamp(m.chg_h1 / 50);
+  const { chgPeakPct, chgZeroPct } = config.momentum;
+  const chgMo = m.chg_h1 == null ? null : m.chg_h1 <= chgPeakPct ? clamp(m.chg_h1 / chgPeakPct) : clamp((chgZeroPct - m.chg_h1) / (chgZeroPct - chgPeakPct));
   const momentumVal = volMo != null && chgMo != null ? (volMo + chgMo) / 2 : (volMo ?? chgMo);
   part('momentum', momentumVal, 'hourly volume pace and 1h price change');
 
@@ -190,6 +191,11 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
   return out;
 }
 
+// Highest price on one pool in the window ending at ts; null when there is none.
+const peakPrice = (db, mint, pool, ts, config) => db.prepare(
+  'SELECT MAX(price_usd) p FROM pool_snapshots WHERE mint = ? AND pool IS ? AND ts BETWEEN ? AND ?',
+).get(mint, pool, ts - config.drawdown.windowMinutes * 60, ts).p;
+
 // Latest row per mint from the last 30 minutes, kept only if listed, best score first.
 export function runningNow(db, now, config = defaultConfig) {
   const since = Math.floor(now / 1000) - 1800;
@@ -197,20 +203,22 @@ export function runningNow(db, now, config = defaultConfig) {
   const g = config.gem;
   return db.prepare(
     `SELECT c.*, t.symbol, t.name, t.image_url, tt.keyword AS theme,
-       s.created_at, s.buyers_h1, s.buyers_h6, s.buys_h1, s.sells_h1 FROM candidates c
+       s.pool, s.created_at, s.buyers_h1, s.buyers_h6, s.buys_h1, s.sells_h1 FROM candidates c
      JOIN (SELECT mint, MAX(id) id FROM candidates WHERE ts > ? GROUP BY mint) l ON l.id = c.id
      LEFT JOIN pool_snapshots s ON s.rowid = (SELECT MAX(rowid) FROM pool_snapshots WHERE mint = c.mint AND ts = c.ts AND source = 'candidate')
      LEFT JOIN tokens t ON t.mint = c.mint LEFT JOIN token_theme tt ON tt.mint = c.mint
      WHERE c.listed = 1
-     ORDER BY c.score DESC`).all(since).map(({ created_at, buyers_h1, buyers_h6, buys_h1, sells_h1, ...r }) => {
+     ORDER BY c.score DESC`).all(since).map(({ pool, created_at, buyers_h1, buyers_h6, buys_h1, sells_h1, ...r }) => {
     const ageH = created_at == null ? null : (now / 1000 - created_at) / 3600;
     const surge = buyers_h1 != null && buyers_h6 ? buyers_h1 / (buyers_h6 / 6) : null;
     const trades = buys_h1 == null || sells_h1 == null ? 0 : buys_h1 + sells_h1;
+    const peak = r.price_usd == null ? null : peakPrice(db, r.mint, pool, r.ts, config);
     const gem = r.mcap_usd != null && r.mcap_usd >= g.minMcapUsd && r.mcap_usd <= g.maxMcapUsd
       && ageH != null && ageH < g.maxAgeHours
       && buyers_h1 != null && buyers_h1 >= g.minBuyersH1
       && surge != null && surge >= g.minSurge
-      && trades > 0 && buys_h1 / trades >= g.minBuyShare;
+      && trades > 0 && buys_h1 / trades >= g.minBuyShare
+      && (!peak || r.price_usd >= peak * (1 - g.maxDrawdownShare));
     return {
       ...r,
       gem,
@@ -292,10 +300,12 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
     const unknowns = cand ? JSON.parse(cand.unknowns || '[]') : [];
     const scoreReasons = cand ? JSON.parse(cand.reasons || '[]') : [];
     const hasAlert = (k) => exitByKind.has(k);
+    const peak = snap?.price_usd == null ? null : peakPrice(db, mint, snap.pool, snap.ts, config);
+    const drawdown = peak > 0 && snap.price_usd <= peak * (1 - config.drawdown.cautionShare) ? 1 - snap.price_usd / peak : 0;
 
     const flagVetoes = vetoes.filter((v) => v !== 'age');
     const isFlag = flagVetoes.length > 0 || hasAlert('exit_deployer') || hasAlert('exit_liquidity');
-    const isCaution = !isFlag && (!cand || hasAlert('exit_wallet') || hasAlert('exit_divergence') || vetoes.includes('age') || cand.score < 45 || unknowns.length > 0);
+    const isCaution = !isFlag && (!cand || hasAlert('exit_wallet') || hasAlert('exit_divergence') || vetoes.includes('age') || cand.score < 45 || unknowns.length > 0 || drawdown > 0);
     const status = isFlag ? 'flag' : isCaution ? 'caution' : 'safe';
     const label = status === 'flag' ? 'Red flag' : status === 'caution' ? 'Caution' : 'Safe to hold';
 
@@ -307,6 +317,7 @@ export function watchList(db, now, config = defaultConfig, wallets = []) {
     }
     if (cand && !vetoes.length && cand.score < 45) reasons.push(`Score is low (${cand.score}/100)`);
     if (cand && unknowns.length > 0) reasons.push(`Missing safety or market data: ${unknowns.join(', ')}`);
+    if (drawdown > 0) reasons.push(`Price is ${Math.round(drawdown * 100)}% below its 2h peak`);
     if (!reasons.length) reasons.push('Passed all safety checks with no recent exit alerts');
 
     return {
