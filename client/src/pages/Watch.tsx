@@ -15,6 +15,7 @@ import {
   AddressLink,
   AlertWalletDisplay,
   Badge,
+  OppRiskChips,
   Card,
   TokenAvatar,
 } from '../components/ui';
@@ -136,6 +137,21 @@ function ScoreStatTile({
                 );
               })}
             </ul>
+            {coin.risk_reasons && coin.risk_reasons.length > 0 && (
+              <div className="mt-2 border-t border-[#2d251d] pt-1.5">
+                <span className="font-semibold text-[#f4ede2]">Risk {coin.risk}</span>
+                <ul className="mt-1 space-y-1">
+                  {coin.risk_reasons.map((r) => (
+                    <li key={r.factor} className="flex justify-between gap-2">
+                      <span className="truncate text-[#f4ede2]/90">{r.factor}</span>
+                      <span className="text-[#cfc3b4] tabular-nums">
+                        {r.points}/{r.max}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -212,6 +228,7 @@ function WatchCard({
           <h3 className="text-base font-semibold text-[#f4ede2]">{title}</h3>
           <AddressLink address={coin.mint} showDexScreener />
           <Badge tone={tone}>{label}</Badge>
+          <OppRiskChips opportunity={coin.opportunity} risk={coin.risk} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <motion.button

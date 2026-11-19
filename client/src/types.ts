@@ -62,6 +62,9 @@ export interface WatchCoin {
   image_url: string | null;
   reasons: string[];
   alerts: AlertItem[];
+  opportunity?: number | null;
+  risk?: number | null;
+  risk_reasons?: RiskReason[];
 }
 
 export interface WatchResponse {
@@ -77,6 +80,12 @@ export interface WalletOption {
 export interface PingResponse {
   alerts: AlertItem[];
   wallets: WalletOption[];
+}
+
+export interface RiskReason {
+  factor: string;
+  points: number;
+  max: number;
 }
 
 export interface ScoreReason {
@@ -99,6 +108,9 @@ export interface RunningCoin {
   mcap_usd: number | null;
   unknowns: string[];
   reasons: ScoreReason[];
+  opportunity?: number | null;
+  risk?: number | null;
+  risk_reasons?: RiskReason[];
 }
 
 export interface ThemeMember {
@@ -138,6 +150,17 @@ export interface CalibrationRow {
   count: number;
   meanChangePct: number;
   positiveShare: number;
+  hitUp20?: number | null;
+  hitDown30?: number | null;
+  pathCount?: number;
+}
+
+export interface CalibrationPart {
+  part: string;
+  third: number;
+  count: number;
+  hitUp20: number | null;
+  hitDown30: number | null;
 }
 
 export interface NarrativesResponse {
@@ -146,6 +169,8 @@ export interface NarrativesResponse {
   wallets: WalletScorecardRow[];
   calibration: {
     rows: CalibrationRow[];
+    parts?: CalibrationPart[];
+    thinPath?: number;
     missed?: number;
   };
 }

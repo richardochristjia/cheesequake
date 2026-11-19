@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   AddressLink,
   Badge,
+  OppRiskChips,
   Card,
   TONE_TEXT,
   TokenAvatar,
@@ -27,6 +28,9 @@ import {
   usePersistedState,
 } from '../lib/tabState';
 import type { NarrativesResponse } from '../types';
+
+const THIRDS = ['Low third', 'Mid third', 'High third'];
+const EXTRA_PARTS: Record<string, string> = { opportunity: 'Opportunity', risk: 'Risk' };
 
 const NARRATIVES_OPEN_MINTS_KEY = 'cheesequake:tab-state:narratives:open-mints';
 const NARRATIVES_SHOW_ALL_THEMES_KEY =
@@ -142,6 +146,16 @@ export function Narratives({
     data.calibration.missed ? ` Missed: ${data.calibration.missed}.` : ''
   }`;
 
+  const hit = (v: number | null | undefined, n: number | undefined) =>
+    v == null || !n ? '–' : `${fmt(v * 100)}%`;
+  const partMap = new Map<string, NonNullable<NarrativesResponse['calibration']['parts']>>();
+  for (const c of data.calibration.parts ?? []) {
+    partMap.set(c.part, [...(partMap.get(c.part) ?? []), c]);
+  }
+  const partRows = [...partMap.entries()].map(
+    ([part, cs]) => [part, [0, 1, 2].map((i) => cs.find((c) => c.third === i))] as const,
+  );
+
   const renderBreakdown = (r: NarrativesResponse['running'][number]) => {
     const byPart = new Map((r.reasons || []).map((x) => [x.part, x]));
     return (
@@ -255,6 +269,7 @@ export function Narratives({
                             </strong>
                           )}
                           {r.gem && <Badge tone="good">Early gem</Badge>}
+                          <OppRiskChips opportunity={r.opportunity} risk={r.risk} />
                         </div>
                         <p className="mt-0.5 text-xs text-[#cfc3b4]">
                           {r.theme || 'no theme'}
@@ -383,6 +398,7 @@ export function Narratives({
                                 </strong>
                               )}
                               {r.gem && <Badge tone="good">Early gem</Badge>}
+                              <OppRiskChips opportunity={r.opportunity} risk={r.risk} />
                             </div>
                           </td>
                           <td className="py-3 px-3 align-middle text-[#f4ede2]/90 whitespace-nowrap">
@@ -810,6 +826,14 @@ export function Narratives({
                         {fmt(r.positiveShare * 100)}%
                       </dd>
                     </div>
+                    <div>
+                      <dt className="text-xs text-[#cfc3b4]">Hit +20%</dt>
+                      <dd className="text-sm text-[#f4ede2]/90">{hit(r.hitUp20, r.pathCount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-[#cfc3b4]">Hit -30%</dt>
+                      <dd className="text-sm text-[#f4ede2]/90">{hit(r.hitDown30, r.pathCount)}</dd>
+                    </div>
                   </dl>
                 </motion.div>
               ))}
@@ -823,7 +847,9 @@ export function Narratives({
                     <th className="py-2.5 px-3 text-right">Horizon</th>
                     <th className="py-2.5 px-3 text-right">Count</th>
                     <th className="py-2.5 px-3 text-right">Mean change</th>
-                    <th className="py-2.5 pl-3 text-right">Share up</th>
+                    <th className="py-2.5 px-3 text-right">Share up</th>
+                    <th className="py-2.5 px-3 text-right">Hit +20%</th>
+                    <th className="py-2.5 pl-3 text-right">Hit -30%</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2d251d]/70">
@@ -858,18 +884,74 @@ export function Narratives({
                       >
                         {fmt(r.meanChangePct, 1)}%
                       </td>
-                      <td className="py-2.5 pl-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
                         {fmt(r.positiveShare * 100)}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
+                        {hit(r.hitUp20, r.pathCount)}
+                      </td>
+                      <td className="py-2.5 pl-3 text-right tabular-nums text-sm text-[#f4ede2]/90 whitespace-nowrap">
+                        {hit(r.hitDown30, r.pathCount)}
                       </td>
                     </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {!!data.calibration.thinPath && (
+              <p className="mt-3 text-xs text-[#cfc3b4]">
+                Thin path: {data.calibration.thinPath} rows
+              </p>
+            )}
           </>
         )}
         </Card>
       </motion.div>
+
+      {partRows.length > 0 && (
+        <motion.div variants={staggerItemVariants}>
+          <Card
+            title="By score part (1h)"
+            subtitle="Each part split into thirds (low, mid, high): rows, share that rose 20%, share that fell 30%."
+            className={highlightClass}
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[#2d251d] text-xs font-medium text-[#cfc3b4]">
+                    <th className="py-2.5 pr-4 text-left">Part</th>
+                    {THIRDS.map((t) => (
+                      <th key={t} className="py-2.5 px-3 text-right">{t}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#2d251d]/70">
+                  {partRows.map(([part, thirds]) => (
+                    <tr key={part}>
+                      <td className="py-2.5 pr-4 font-medium text-[#f4ede2] whitespace-nowrap">
+                        {PARTS[part]?.name ?? EXTRA_PARTS[part] ?? part}
+                      </td>
+                      {[0, 1, 2].map((i) => {
+                        const c = thirds[i];
+                        return (
+                          <td
+                            key={i}
+                            className="py-2.5 px-3 text-right tabular-nums text-xs text-[#f4ede2]/90 whitespace-nowrap"
+                          >
+                            {c
+                              ? `${c.count} / +20% ${hit(c.hitUp20, c.count)} / -30% ${hit(c.hitDown30, c.count)}`
+                              : '–'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
