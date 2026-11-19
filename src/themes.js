@@ -93,6 +93,7 @@ export function runThemes({ db, now, config = defaultConfig }) {
   const { themes, tokenTheme, hour } = build(db, now, config);
   const ins = db.prepare('INSERT OR REPLACE INTO theme_hourly(hour, keyword, tokens, volume, share) VALUES (?,?,?,?,?)');
   for (const th of themes) ins.run(hour, th.keyword, th.tokens, th.volume, th.share);
+  db.exec('DELETE FROM token_theme'); // rebuilt each run; drops coins that left a theme or whose theme got tagged
   const up = db.prepare('INSERT OR REPLACE INTO token_theme(mint, keyword, hour) VALUES (?,?,?)');
   for (const [mint, kw] of tokenTheme) up.run(mint, kw, hour);
   return themes;
