@@ -2618,4 +2618,58 @@ describe('Cheesequake UI', () => {
     fireEvent.mouseEnter(unscannedValue.parentElement as HTMLElement);
     expect(screen.queryByRole('tooltip')).toBeNull();
   });
+
+  it('shows hit-rate columns, per-part table, thin-path note and Opp/Risk chips (AC14)', async () => {
+    const mint = addr('O');
+    const reasons = [{ factor: 'drawdown', points: 18, max: 20 }];
+    globalThis.fetch = mockFetch({
+      narratives: () => ({
+        themes: [],
+        running: [
+          { mint: addr('R'), symbol: 'RUN', name: 'Run', theme: null, score: 70, band: 'watch', mcap_usd: 1000, reasons: [], unknowns: [], opportunity: 64, risk: 72, risk_reasons: reasons },
+        ],
+        wallets: [],
+        calibration: {
+          rows: [
+            { band: 'watch', horizon_h: 1, count: 40, meanChangePct: 2, positiveShare: 0.5, hitUp20: 0.25, hitDown30: 0.1, pathCount: 30 },
+            { band: 'strong', horizon_h: 1, count: 5, meanChangePct: 1, positiveShare: 0.5, hitUp20: null, hitDown30: null, pathCount: 0 },
+          ],
+          parts: [
+            { part: 'risk', third: 0, count: 10, hitUp20: 0.1, hitDown30: 0.02 },
+            { part: 'risk', third: 2, count: 12, hitUp20: 0.3, hitDown30: 0.42 },
+          ],
+          thinPath: 7,
+          missed: 0,
+        },
+      }),
+      watch: () => ({
+        ok: true,
+        coins: [{
+          mint, symbol: 'OPP', name: 'Opp', pool: null, status: 'caution', label: 'Caution', score: 70, band: 'watch',
+          price_usd: 1, mcap_usd: 1000, liquidity_usd: 500, vol_h24: 10, image_url: null, reasons: ['x'], alerts: [],
+          scoreReasons: [{ part: 'health', points: 10, max: 20 }], unknowns: [],
+          opportunity: 55, risk: 31, risk_reasons: reasons,
+        }],
+      }),
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /Narratives/i }));
+    await waitFor(() => expect(screen.getAllByText('Hit +20%').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('Hit -30%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('25%').length).toBeGreaterThan(0);
+    expect(screen.getByText('By score part (1h)')).toBeInTheDocument();
+    expect(screen.getByText(/12 \/ \+20% 30% \/ -30% 42%/)).toBeInTheDocument();
+    expect(screen.getByText('Thin path: 7 rows')).toBeInTheDocument();
+    expect(screen.getAllByText('Opp 64').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Risk 72').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Watch/i }));
+    await waitFor(() => expect(screen.getByText('Opp 55')).toBeInTheDocument());
+    expect(screen.getByText('Risk 31')).toBeInTheDocument();
+    fireEvent.focus(screen.getByText('70/100').closest('[tabindex="0"]') as HTMLElement);
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText('drawdown')).toBeInTheDocument();
+    expect(within(tip).getByText('18/20')).toBeInTheDocument();
+  });
 });

@@ -82,6 +82,24 @@ export function Badge({
   );
 }
 
+/** Opportunity and Risk chips; renders nothing when both are missing. */
+export function OppRiskChips({
+  opportunity,
+  risk,
+}: {
+  opportunity?: number | null;
+  risk?: number | null;
+}) {
+  if (opportunity == null && risk == null) return null;
+  const riskTone: Tone = risk == null ? 'mut' : risk >= 60 ? 'bad' : risk >= 30 ? 'mid' : 'mut';
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {opportunity != null && <Badge tone="mut">Opp {opportunity}</Badge>}
+      {risk != null && <Badge tone={riskTone}>Risk {risk}</Badge>}
+    </span>
+  );
+}
+
 /** Copy text via Clipboard API in secure contexts, falling back to execCommand for non-HTTPS origins. */
 export async function copyText(text: string): Promise<boolean> {
   if (
