@@ -7,3 +7,4 @@ node_modules/
 public/dist/
 wallets*.txt
 !wallets.example.txt
+data/ohlcv/
