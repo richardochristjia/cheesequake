@@ -27,7 +27,8 @@ export function openDb(path) {
   db.exec(SCHEMA);
   const added = [['tokens', 'image_url'], ['pool_snapshots', 'chg_m5'],
     ['outcomes', 'max_gain'], ['outcomes', 'max_loss'], ['outcomes', 'path_points'],
-    ['candidates', 'opportunity'], ['candidates', 'risk'], ['candidates', 'risk_reasons']];
+    ['candidates', 'opportunity'], ['candidates', 'risk'], ['candidates', 'risk_reasons'],
+    ['candidates', 'top10_pct'], ['candidates', 'insider_pct'], ['candidates', 'lp_locked_pct']];
   for (const [table, col] of added) {
     if (!db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${col}`);

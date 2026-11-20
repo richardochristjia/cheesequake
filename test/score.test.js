@@ -669,3 +669,55 @@ test('listed candidates store opportunity, risk and risk_reasons; vetoed rows st
   assert.equal(vr.risk, null);
   assert.equal(vr.risk_reasons, null);
 });
+
+const factsOf = (db) => db.prepare('SELECT listed, top10_pct, insider_pct, lp_locked_pct FROM candidates').get();
+
+test('openDb adds the scan-time fact columns to an old candidates table and keeps its rows', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sf-db-facts-'));
+  const dbPath = join(dir, 'old.db');
+  try {
+    const old = new DatabaseSync(dbPath);
+    old.exec('CREATE TABLE candidates(id INTEGER PRIMARY KEY, ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd)');
+    old.prepare("INSERT INTO candidates(ts, mint, score, band, listed) VALUES (1, ?, 50, 'mixed', 1)").run(MINT);
+    old.close();
+    for (const path of [dbPath, ':memory:']) {
+      const db = openDb(path);
+      const names = db.prepare('PRAGMA table_info(candidates)').all().map((c) => c.name);
+      for (const c of ['top10_pct', 'insider_pct', 'lp_locked_pct']) assert.ok(names.includes(c), `${path} lacks ${c}`);
+      if (path === dbPath) assert.deepEqual({ ...factsOf(db) }, { listed: 1, top10_pct: null, insider_pct: null, lp_locked_pct: null });
+      db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a listed row stores top10, insider and locked-liquidity shares seen at scan time', async () => {
+  const { db, deps } = setup({ rug: goodRaw({ insiderNetworks: [{ currentHolding: 1e8 }], markets: [{ lp: { lpLockedPct: 90, quoteUSD: 1, baseUSD: 1 } }] }), mintInfo: info });
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.deepEqual({ ...factsOf(db) }, { listed: 1, top10_pct: 8, insider_pct: 10, lp_locked_pct: 90 });
+});
+
+test('a report-vetoed row stores the facts and is not listed', async () => {
+  const { db, deps } = setup({ rug: goodRaw({ topHolders: [{ address: 'a', owner: 'o', pct: 30 }] }), mintInfo: info });
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.deepEqual({ ...factsOf(db) }, { listed: 0, top10_pct: 30, insider_pct: 0, lp_locked_pct: 100 });
+});
+
+test('a cheap-vetoed row stores null facts', async () => {
+  const { db, deps } = setup({ rug: goodRaw(), mintInfo: info });
+  const base = deps.dexGet;
+  deps.dexGet = async (url) => (await base(url)).map((p) => ({ ...p, liquidity: { usd: 100 } }));
+  await runCandidates({ db, deps, now: () => NOW });
+  const row = db.prepare('SELECT * FROM candidates').get();
+  assert.match(row.vetoes, /liquidity/);
+  assert.deepEqual([row.top10_pct, row.insider_pct, row.lp_locked_pct], [null, null, null]);
+});
+
+test('no RugCheck report: facts are null and the unknowns are unchanged', async () => {
+  const down = async () => { throw Object.assign(new Error('down'), { code: 'SOURCE_UNAVAILABLE' }); };
+  const { db, deps } = setup({ rug: down, mintInfo: info });
+  await runCandidates({ db, deps, now: () => NOW });
+  assert.deepEqual({ ...factsOf(db) }, { listed: 1, top10_pct: null, insider_pct: null, lp_locked_pct: null });
+  assert.ok(JSON.parse(db.prepare('SELECT unknowns FROM candidates').get().unknowns).includes('top10'));
+});

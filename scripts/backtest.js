@@ -14,7 +14,7 @@ const CACHE = 'data/ohlcv';
 const FEES = 0.01; // round trip
 const TRADE_USD = 200;
 const DEAD_GAP_S = 2 * 3600;
-const ENTRY_MAX_DELAY_S = 600; // no candle within 10 min of the scan: the scan price is not tradable, so do not price it
+const ENTRY_MAX_DELAY_S = 600; // control events (no scan price): no candle within 10 min of the scan means the price is not tradable, so do not price it
 const CANDLE_LIMIT = 1000;
 const GECKO_GAP_MS = 7000; // the free OHLCV endpoint answers about 10 calls a minute; 3s pacing mostly gets 429s
 export const LABEL_SETS = [
@@ -26,28 +26,32 @@ const PRIMARY = 'a1h';
 // ---------- pure helpers (exported for tests) ----------
 
 // Candles are [ts, open, high, low, close, volume] sorted oldest first. Returns {kind, ret}:
-// kind is win | loss | drift | dead | unpriced | open; ret is net of costs.
-export function label(candles, { scanTs, liquidity, up, dn, h, dataEnd = Infinity }) {
+// kind is win | loss | drift | dead | unpriced | open; ret is net of costs, gross the same outcome without costs.
+// With `entry` (the scan-time price) the path is every candle from the scan on, whatever its delay; without it the first candle's open is the entry and must come within 10 min.
+export function label(candles, { scanTs, liquidity, up, dn, h, dataEnd = Infinity, entry: scanPrice }) {
   const end = scanTs + h * 3600;
   if (end > dataEnd) return { kind: 'open' };
   const win = candles.filter((c) => c[0] >= scanTs && c[0] < end);
-  if (!win.length || win[0][0] > scanTs + ENTRY_MAX_DELAY_S || !(liquidity > 0) || !(win[0][1] > 0)) return { kind: 'unpriced' };
-  const entry = win[0][1];
+  const given = scanPrice > 0;
+  if (!win.length || !(liquidity > 0)) return { kind: 'unpriced' };
+  if (!given && (win[0][0] > scanTs + ENTRY_MAX_DELAY_S || !(win[0][1] > 0))) return { kind: 'unpriced' };
+  const entry = given ? scanPrice : win[0][1];
   const cost = FEES + (2 * TRADE_USD) / liquidity;
   let first = null;
   for (const c of win) {
     if (c[3] <= entry * (1 - dn)) { first = 'loss'; break; } // both in one candle counts as the loss
     if (c[2] >= entry * (1 + up)) { first = 'win'; break; }
   }
-  if (first === 'win') return { kind: 'win', ret: Math.max(-1, up - cost) };
+  if (first === 'win') return { kind: 'win', ret: Math.max(-1, up - cost), gross: up };
   // Dead: at or under half the entry price, then no candle for 2h. A rug cannot be exited at the barrier.
   for (let i = candles.indexOf(win[0]); i < candles.length && candles[i][0] < end; i++) {
     if (candles[i][4] > entry / 2) continue;
     const gap = (candles[i + 1]?.[0] ?? dataEnd) - candles[i][0];
-    if (gap >= DEAD_GAP_S) return { kind: 'dead', ret: -1 };
+    if (gap >= DEAD_GAP_S) return { kind: 'dead', ret: -1, gross: -1 };
   }
-  if (first === 'loss') return { kind: 'loss', ret: Math.max(-1, -dn - cost) };
-  return { kind: 'drift', ret: Math.max(-1, win.at(-1)[4] / entry - 1 - cost) };
+  if (first === 'loss') return { kind: 'loss', ret: Math.max(-1, -dn - cost), gross: -dn };
+  const drift = win.at(-1)[4] / entry - 1;
+  return { kind: 'drift', ret: Math.max(-1, drift - cost), gross: Math.max(-1, drift) };
 }
 
 // First scan of each mint in each clock hour.
@@ -139,8 +143,11 @@ export function rawInputs(m) {
   };
 }
 
-function loadEvents(db, until) {
-  const rows = dedupeHourly(db.prepare('SELECT id, ts, mint, score, band, listed, vetoes, reasons, unknowns FROM candidates WHERE ts <= ? ORDER BY ts, id').all(until));
+// Scan-time report facts live on `candidates`; older DBs lack the columns, so select NULL there.
+export function loadEvents(db, until) {
+  const has = new Set(db.prepare('PRAGMA table_info(candidates)').all().map((c) => c.name));
+  const factCols = ['top10_pct', 'insider_pct', 'lp_locked_pct'].map((c) => (has.has(c) ? c : `NULL AS ${c}`)).join(', ');
+  const rows = dedupeHourly(db.prepare(`SELECT id, ts, mint, score, band, listed, vetoes, reasons, unknowns, ${factCols} FROM candidates WHERE ts <= ? ORDER BY ts, id`).all(until));
   const snap = db.prepare("SELECT * FROM pool_snapshots WHERE mint = ? AND ts = ? AND source = 'candidate' ORDER BY rowid DESC LIMIT 1");
   const peakQ = db.prepare('SELECT MAX(price_usd) p FROM pool_snapshots WHERE mint = ? AND pool IS ? AND ts BETWEEN ? AND ?');
   const reportQ = db.prepare('SELECT json FROM reports WHERE mint = ?');
@@ -157,11 +164,14 @@ function loadEvents(db, until) {
     const parts = {};
     for (const p of parse(r.reasons, [])) parts[p.part] = p.max ? p.points / p.max : null;
     const supply = report?.supply;
+    const latest = { top10: top10Pct(report), insider: supply ? (report.insiderHolding / supply) * 100 : null, lpLocked: report?.lpLockedPct ?? null };
+    const stored = { top10: r.top10_pct, insider: r.insider_pct, lpLocked: r.lp_locked_pct };
+    const facts = {}, leaky = {}; // a stored scan-time value wins; the latest report is the fallback and may postdate the scan
+    for (const k of Object.keys(latest)) { facts[k] = stored[k] ?? latest[k]; leaky[k] = stored[k] == null && latest[k] != null; }
     events.push({
       mint: r.mint, pool: m.pool, ts: r.ts, listed: !!r.listed, score: r.listed ? r.score : null, band: r.band,
-      vetoes: parse(r.vetoes, []), parts, liquidity: m.liquidity_usd, in: rawInputs(m),
-      opportunity: or.opportunity, risk: or.risk,
-      leaky: { top10: top10Pct(report), insider: supply ? (report.insiderHolding / supply) * 100 : null, lpLocked: report?.lpLockedPct ?? null },
+      vetoes: parse(r.vetoes, []), parts, liquidity: m.liquidity_usd, entry: m.price_usd, in: rawInputs(m),
+      opportunity: or.opportunity, risk: or.risk, facts, leaky,
     });
   }
   return events;
@@ -180,7 +190,7 @@ function pickControls(db, events, until, n = 200) {
     .filter((r) => !used.has(r.pool) && !mints.has(r.mint) && r.created_at != null && r.liquidity_usd > 0)
     .sort((a, b) => (a.pool < b.pool ? -1 : 1));
   return mulberryShuffle(all, 42).slice(0, n).map((r) => ({
-    mint: r.mint, pool: r.pool, ts: r.created_at + 300, listed: false, control: true, liquidity: r.liquidity_usd, vetoes: [], parts: {}, in: {}, leaky: {},
+    mint: r.mint, pool: r.pool, ts: r.created_at + 300, listed: false, control: true, liquidity: r.liquidity_usd, vetoes: [], parts: {}, in: {}, facts: {}, leaky: {},
   }));
 }
 
@@ -235,7 +245,7 @@ export function priceEvents(events, dataEnd, read = readCache) {
     e.labels = {};
     for (const s of LABEL_SETS) {
       const truncated = cache && cache.list.length >= CANDLE_LIMIT && e.ts < cache.list[0][0]; // history cut off before the scan
-      const l = !cache || truncated ? { kind: 'unpriced' } : label(cache.list, { scanTs: e.ts, liquidity: e.liquidity, ...s, dataEnd: Math.min(dataEnd, cache.fetchedAt) }); // candles after the fetch are unknown, not absent
+      const l = !cache || truncated ? { kind: 'unpriced' } : label(cache.list, { scanTs: e.ts, liquidity: e.liquidity, entry: e.entry, ...s, dataEnd: Math.min(dataEnd, cache.fetchedAt) }); // candles after the fetch are unknown, not absent
       e.labels[s.id] = l;
       if (l.kind === 'unpriced') unpriced[s.id]++;
       if (l.kind === 'open') open[s.id]++;
@@ -254,7 +264,8 @@ const interval = (ci, f = num) => (ci ? `[${f(ci[0])}, ${f(ci[1])}]` : '[n/a]');
 const priced = (rows, id) => rows.filter((r) => r.labels[id].ret != null);
 const isWin = (id) => (r) => (r.labels[id].kind === 'win' ? 1 : 0);
 const retOf = (id) => (r) => r.labels[id].ret;
-const corrStat = (xf, id) => (rows) => spearman(rows.map(xf), rows.map(retOf(id)));
+const grossOf = (id) => (r) => r.labels[id].gross;
+const corrStat = (xf, id, yf = retOf(id)) => (rows) => spearman(rows.map(xf), rows.map(yf));
 const rowsWith = (rows, xf, id) => priced(rows, id).filter((r) => xf(r) != null && Number.isFinite(xf(r)));
 
 function monotone(groups, id) {
@@ -267,34 +278,36 @@ function metricTable(title, metrics, rows, ctx) {
   const { draws, split } = ctx;
   const out = [`### ${title}`, '',
     `Primary label set \`${PRIMARY}\` (+30% / -20%, 1h). Quintile cells run Q1 (lowest value) to Q5.`, '',
-    '| metric | n mints | rho [95% CI] | rho tune | rho test | win% Q1..Q5 | mean ret Q1..Q5 | monotone | tag |', '|---|---|---|---|---|---|---|---|---|'];
+    '| metric | n mints | rho [95% CI] | rho gross [95% CI] | rho tune | rho test | win% Q1..Q5 | mean ret Q1..Q5 | monotone | tag |', '|---|---|---|---|---|---|---|---|---|---|'];
   const other = ['', '| metric | ' + LABEL_SETS.filter((s) => s.id !== PRIMARY).map((s) => `rho ${s.id} [95% CI]`).join(' | ') + ' |', '|---|---|---|---|'];
   for (const m of metrics) {
     const r = rowsWith(rows, m.f, PRIMARY);
     const rho = corrStat(m.f, PRIMARY)(r);
+    const gross = corrStat(m.f, PRIMARY, grossOf(PRIMARY));
+    const leak = m.leaky ? m.leaky(r) : 0; // share of rows that fell back to the latest report
     const q = quintiles(r, m.f);
     const sp = (pred) => corrStat(m.f, PRIMARY)(r.filter(pred));
     const tune = r.filter((x) => x.ts <= split), test = r.filter((x) => x.ts > split);
-    out.push(`| ${m.name} | ${mints(r)} | ${num(rho)} ${interval(bootstrap(r, corrStat(m.f, PRIMARY), draws))} | ${num(sp((x) => x.ts <= split))} (${mints(tune)}) | ${num(sp((x) => x.ts > split))} (${mints(test)}${mints(test) < 20 ? ' thin' : ''}) | ${q.map((g) => pct(mean(g.map(isWin(PRIMARY))))).join(' ')} | ${q.map((g) => pct(mean(g.map(retOf(PRIMARY))))).join(' ')} | ${monotone(q, PRIMARY)} | ${[m.leaky ? 'leaky' : '', thin(r).trim()].filter(Boolean).join(' ')} |`);
+    out.push(`| ${m.name} | ${mints(r)} | ${num(rho)} ${interval(bootstrap(r, corrStat(m.f, PRIMARY), draws))} | ${num(gross(r))} ${interval(bootstrap(r, gross, draws))} | ${num(sp((x) => x.ts <= split))} (${mints(tune)}) | ${num(sp((x) => x.ts > split))} (${mints(test)}${mints(test) < 20 ? ' thin' : ''}) | ${q.map((g) => pct(mean(g.map(isWin(PRIMARY))))).join(' ')} | ${q.map((g) => pct(mean(g.map(retOf(PRIMARY))))).join(' ')} | ${monotone(q, PRIMARY)} | ${[leak ? `leaky ${pct(leak)}` : '', thin(r).trim()].filter(Boolean).join(' ')} |`);
     const cells = LABEL_SETS.filter((s) => s.id !== PRIMARY).map((s) => {
       const rs = rowsWith(rows, m.f, s.id);
       return `${num(corrStat(m.f, s.id)(rs))} ${interval(bootstrap(rs, corrStat(m.f, s.id), draws))} (${mints(rs)} mints)`;
     });
-    other.push(`| ${m.name}${m.leaky ? ' (leaky)' : ''} | ${cells.join(' | ')} |`);
+    other.push(`| ${m.name}${leak ? ' (leaky)' : ''} | ${cells.join(' | ')} |`);
   }
   return [...out, ...other, ''].join('\n');
 }
 
 function groupTable(title, groups, ctx, controls) {
-  const { draws } = ctx;
+  const { draws, scanned } = ctx;
   const out = [`### ${title}`, ''];
   for (const id of ['a1h', 'a6h']) {
-    const c = priced(controls, id);
-    out.push(`Label set \`${id}\`. Control: ${c.length} events, win ${pct(mean(c.map(isWin(id))), 1)}, mean ret ${pct(mean(c.map(retOf(id))), 1)}, dead ${pct(mean(c.map((r) => (r.labels[id].kind === 'dead' ? 1 : 0))), 1)}.`, '',
-      '| group | n mints | n events | win% [95% CI] | mean ret | dead% | <= -50% | control win% | tag |', '|---|---|---|---|---|---|---|---|---|');
+    const c = priced(controls, id), all = priced(scanned, id);
+    out.push(`Label set \`${id}\`. Control: ${c.length} events, win ${pct(mean(c.map(isWin(id))), 1)}, mean ret ${pct(mean(c.map(retOf(id))), 1)}, dead ${pct(mean(c.map((r) => (r.labels[id].kind === 'dead' ? 1 : 0))), 1)}. All scanned (listed + vetoed): ${all.length} events, win ${pct(mean(all.map(isWin(id))), 1)}, mean ret ${pct(mean(all.map(retOf(id))), 1)}.`, '',
+      '| group | n mints | n events | win% [95% CI] | mean ret | dead% | <= -50% | control win% | all-scanned win% | tag |', '|---|---|---|---|---|---|---|---|---|---|');
     for (const [name, rows] of groups) {
       const r = priced(rows, id);
-      out.push(`| ${name} | ${mints(r)} | ${r.length} | ${pct(mean(r.map(isWin(id))), 1)} ${interval(bootstrap(r, (x) => mean(x.map(isWin(id))), draws), (v) => pct(v, 1))} | ${pct(mean(r.map(retOf(id))), 1)} | ${pct(mean(r.map((x) => (x.labels[id].kind === 'dead' ? 1 : 0))), 1)} | ${pct(mean(r.map((x) => (x.labels[id].ret <= -0.5 ? 1 : 0))), 1)} | ${pct(mean(c.map(isWin(id))), 1)} | ${thin(r).trim()} |`);
+      out.push(`| ${name} | ${mints(r)} | ${r.length} | ${pct(mean(r.map(isWin(id))), 1)} ${interval(bootstrap(r, (x) => mean(x.map(isWin(id))), draws), (v) => pct(v, 1))} | ${pct(mean(r.map(retOf(id))), 1)} | ${pct(mean(r.map((x) => (x.labels[id].kind === 'dead' ? 1 : 0))), 1)} | ${pct(mean(r.map((x) => (x.labels[id].ret <= -0.5 ? 1 : 0))), 1)} | ${pct(mean(c.map(isWin(id))), 1)} | ${pct(mean(all.map(isWin(id))), 1)} | ${thin(r).trim()} |`);
     }
     out.push('');
   }
@@ -336,16 +349,17 @@ function composites(listed, ctx) {
 }
 
 function buildReport({ events, controls, poolStat, unpricedStat, dataEnd, dbSame, draws, nPools, nCovered, nWithCandles }) {
-  const ctx = { draws, split: dataEnd - 24 * 3600 };
+  const ctx = { draws, split: dataEnd - 24 * 3600, scanned: events };
   const listed = events.filter((e) => e.listed), vetoed = events.filter((e) => !e.listed);
   const out = [];
   out.push('# Backtest report', '',
-    `Generated from \`${config.dbPath}\`, scans up to ${new Date(dataEnd * 1000).toISOString()}. Bootstrap: ${draws} draws over mints, fixed seed. Tune period = events up to the last 24h, test period = the last 24h. Rows under 20 mints are marked \`thin\`. Rows built on RugCheck report fields are marked \`leaky\` (the report may postdate the scan).`, '',
+    `Generated from \`${config.dbPath}\`, scans up to ${new Date(dataEnd * 1000).toISOString()}. Bootstrap: ${draws} draws over mints, fixed seed. Tune period = events up to the last 24h, test period = the last 24h. Rows under 20 mints are marked \`thin\`. Top10, insider and LP-locked values come from the columns stored at scan time; a row that fell back to the latest RugCheck report is marked \`leaky\` with the share of rows affected (that report may postdate the scan). Scan events enter at the scan-time price with the path from candles at or after the scan; control events enter at the first candle open within 10 minutes. \`rho gross\` is the same outcome without fees and impact.`, '',
     '## 1. Coverage', '',
     `coverage: ${nCovered} of ${nPools} pools have candles (${pct(nCovered / nPools, 1)}); ${nWithCandles} with at least one candle`, '',
     `- pools: ${poolStat.fetched} fetched this run, ${poolStat.cached} from cache, ${poolStat.failed} failed, ${poolStat.missing} not cached (offline)`,
     `- events: ${events.length} scan events (${listed.length} listed, ${vetoed.length} vetoed) from ${mints(events)} mints, plus ${controls.length} control events`,
     `- unpriced (no usable candle) / open (horizon not over yet), per label set: ${LABEL_SETS.map((s) => `${s.id} ${unpricedStat.unpriced[s.id]} / ${unpricedStat.open[s.id]}`).join(', ')}`,
+    `- unpriced share of scan events plus controls (${events.length + controls.length}): ${LABEL_SETS.map((s) => `${s.id} ${pct(unpricedStat.unpriced[s.id] / (events.length + controls.length), 1)}`).join(', ')}; scan events only: ${LABEL_SETS.map((s) => `${s.id} ${pct(events.filter((e) => e.labels[s.id].kind === 'unpriced').length / events.length, 1)}`).join(', ')}; controls only: ${LABEL_SETS.map((s) => `${s.id} ${pct(controls.filter((e) => e.labels[s.id].kind === 'unpriced').length / controls.length, 1)}`).join(', ')}`,
     `- DB opened with \`readOnly: true\`, never written. Size/mtime changed during this run: ${dbSame ? 'no' : 'yes (the live scanner writes this file; not this script)'}`,
     '- Opportunity is recomputed from stored market numbers: the DB has no `chg_m5`, theme or wallet data for these scans, so those inputs count as 0. Risk also reads the latest report (leaky).', '',
     '## 2. Base rate (control pools, no features)', '',
@@ -354,11 +368,18 @@ function buildReport({ events, controls, poolStat, unpricedStat, dataEnd, dbSame
     const c = priced(controls, s.id);
     out.push(`| ${s.id} (+${s.up * 100}% / -${s.dn * 100}%, ${s.h}h) | ${c.length} | ${pct(mean(c.map(isWin(s.id))), 1)} | ${pct(mean(c.map(retOf(s.id))), 1)} | ${pct(mean(c.map((r) => (r.labels[s.id].kind === 'dead' ? 1 : 0))), 1)} |`);
   }
+  out.push('', '### All scanned (listed + vetoed), no features', '', 'Scan events enter at the scan-time price, so this baseline is like-for-like with the listed coins (controls are about 5 minutes old).', '',
+    '| label set | n events | win% | mean ret | dead% |', '|---|---|---|---|---|');
+  for (const s of LABEL_SETS) {
+    const a = priced(events, s.id);
+    out.push(`| ${s.id} (+${s.up * 100}% / -${s.dn * 100}%, ${s.h}h) | ${a.length} | ${pct(mean(a.map(isWin(s.id))), 1)} | ${pct(mean(a.map(retOf(s.id))), 1)} | ${pct(mean(a.map((r) => (r.labels[s.id].kind === 'dead' ? 1 : 0))), 1)} |`);
+  }
   const raw = (k) => (e) => e.in[k];
   const rawMetrics = [['surge', 'surge'], ['buyShare', 'buy share'], ['volPace', 'volume pace'], ['chg_h1', '1h change'], ['depth', 'depth (liq/mcap)'], ['liquidity', 'liquidity $'], ['mcap', 'mcap $'], ['ageH', 'age (h)'], ['buyers', 'buyers 1h']]
     .map(([k, name]) => ({ name, f: raw(k) }));
-  rawMetrics.push({ name: 'opportunity', f: (e) => e.opportunity }, { name: 'risk', f: (e) => e.risk, leaky: true },
-    { name: 'top10 %', f: (e) => e.leaky.top10, leaky: true }, { name: 'insider %', f: (e) => e.leaky.insider, leaky: true }, { name: 'LP locked %', f: (e) => e.leaky.lpLocked, leaky: true });
+  const fact = (name, k) => ({ name, f: (e) => e.facts[k], leaky: (rows) => mean(rows.map((e) => (e.leaky[k] ? 1 : 0))) });
+  rawMetrics.push({ name: 'opportunity', f: (e) => e.opportunity }, { name: 'risk', f: (e) => e.risk, leaky: () => 1 },
+    fact('top10 %', 'top10'), fact('insider %', 'insider'), fact('LP locked %', 'lpLocked'));
   out.push('', '## 3. Inputs and parts (listed events)', '',
     metricTable('3a. Raw inputs', rawMetrics, listed, ctx));
   const partNames = [...new Set(listed.flatMap((e) => Object.keys(e.parts)))];
@@ -384,12 +405,18 @@ function buildReport({ events, controls, poolStat, unpricedStat, dataEnd, dbSame
 
 // ---------- main ----------
 
+export function openReadOnly(path) {
+  const db = new DatabaseSync(path, { readOnly: true });
+  db.exec('PRAGMA busy_timeout = 5000'); // wait out a live scanner write instead of dying with "database is locked"
+  return db;
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const offline = argv.includes('--offline');
   const draws = Number(argv.find((a) => a.startsWith('--draws='))?.slice(8) ?? 1000);
   const log = (m) => process.stderr.write(`${m}\n`);
   const before = statSync(config.dbPath);
-  const db = new DatabaseSync(config.dbPath, { readOnly: true });
+  const db = openReadOnly(config.dbPath);
   const untilArg = argv.find((a) => a.startsWith('--until='))?.slice(8);
   const until = untilArg ? Date.parse(untilArg) / 1000 : Infinity;
   if (Number.isNaN(until)) throw new Error(`bad --until ${untilArg}`);
