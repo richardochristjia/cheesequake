@@ -8,6 +8,7 @@
     "start": "node src/main.js",
     "dev": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
+    "backtest": "node scripts/backtest.js",
     "test": "node --test test/*.test.js && npm --prefix client test"
   },
   "engines": { "node": ">=22.13" },
