@@ -116,10 +116,10 @@ function walletFacts(db, mint, tracked, nowS, config) {
   return { q, consensus: has('consensus'), deployerExit: has('exit_deployer') };
 }
 
-function saveCandidate(db, ts, mint, m, { score, band, listed, vetoes, reasons = [], unknowns = [], opportunity = null, risk = null, riskReasons = null }) {
-  const id = db.prepare('INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd, opportunity, risk, risk_reasons) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+function saveCandidate(db, ts, mint, m, { score, band, listed, vetoes, reasons = [], unknowns = [], opportunity = null, risk = null, riskReasons = null, facts = {} }) {
+  const id = db.prepare('INSERT INTO candidates(ts, mint, score, band, listed, vetoes, reasons, unknowns, price_usd, mcap_usd, opportunity, risk, risk_reasons, top10_pct, insider_pct, lp_locked_pct) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(ts, mint, score, band, listed, JSON.stringify(vetoes), JSON.stringify(reasons), JSON.stringify(unknowns), m.price_usd ?? null, m.mcap_usd ?? null,
-      opportunity, risk, riskReasons && JSON.stringify(riskReasons)).lastInsertRowid;
+      opportunity, risk, riskReasons && JSON.stringify(riskReasons), facts.top10 ?? null, facts.insider ?? null, facts.lpLocked ?? null).lastInsertRowid;
   return Number(id);
 }
 
@@ -210,12 +210,16 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     upsertTokens(db, [m], nowS);
     if (report?.creator) db.prepare('UPDATE tokens SET creator = ? WHERE mint = ?').run(report.creator, mint);
 
+    // Report facts as seen now; stored so a later backtest does not read a report that postdates the scan.
+    const supply = mintInfo?.supply ?? report?.supply;
+    const reportFacts = { top10: top10Pct(report), insider: report?.insiderHolding != null && supply ? (report.insiderHolding / supply) * 100 : null, lpLocked: report?.lpLockedPct ?? null };
+
     // 6. Remaining vetoes.
     const rest = evaluate({ market: m, report, mintInfo, now: nowMs, names: undefined, config });
     const exempt = (xs) => (watchedSet.has(mint) ? xs.filter((v) => v !== 'inactive') : xs);
     const vetoes = exempt([...new Set([...cheap.vetoes, ...rest.vetoes])]);
     const unknowns = exempt([...new Set([...cheap.unknowns, ...rest.unknowns])]);
-    if (vetoes.length) { saveCandidate(db, nowS, mint, m, { score: 0, band: 'avoid', listed: 0, vetoes, unknowns }); continue; }
+    if (vetoes.length) { saveCandidate(db, nowS, mint, m, { score: 0, band: 'avoid', listed: 0, vetoes, unknowns, facts: reportFacts }); continue; }
 
     // 7-10. Score, cap, band, store.
     const facts = walletFacts(db, mint, tracked, nowS, config);
@@ -225,7 +229,7 @@ export async function runCandidates({ db, deps, tracked = [], now, config = defa
     const score = capScore(s.score, allUnknown, config);
     const peak = peakPrice(db, mint, m.pool, nowS, config);
     const or = opportunityRisk({ market: m, report, theme, ...facts, peak, unknowns: allUnknown, config });
-    const id = saveCandidate(db, nowS, mint, m, { score, band: bandOf(score), listed: 1, vetoes: [], reasons: s.reasons, unknowns: allUnknown, ...or });
+    const id = saveCandidate(db, nowS, mint, m, { score, band: bandOf(score), listed: 1, vetoes: [], reasons: s.reasons, unknowns: allUnknown, facts: reportFacts, ...or });
     scheduleOutcomes(db, id, mint, nowS, config);
     out.push({ mint, score });
   }
