@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { label, dedupeHourly, spearman, quintiles, bootstrap } from '../scripts/backtest.js';
+import { label, priceEvents, dedupeHourly, spearman, quintiles, bootstrap } from '../scripts/backtest.js';
 
 const T0 = 1_000_200; // 10-minute-aligned scan time; candles are 5-minute buckets
 const c = (min, o, h, l, cl) => [T0 + min * 60, o, h, l, cl, 1];
@@ -46,6 +46,11 @@ test('entry is the open of the first candle at or after the scan', () => {
   assert.equal(label([c(0, 1, 1, 1, 1)], { ...opts, scanTs: scan }).kind, 'unpriced');
 });
 
+test('first candle more than 10 minutes after the scan is unpriced', () => {
+  assert.equal(label([c(50, 1, 1.3, 1, 1.3)], opts).kind, 'unpriced');
+  assert.equal(label([c(10, 1, 1.3, 1, 1.3)], opts).kind, 'win');
+});
+
 test('impact: $200 in a $10k pool costs 4% plus 1% fees', () => {
   const l = label([c(0, 1, 1.3, 1, 1.3)], { ...opts, liquidity: 10_000 });
   near(l.ret, 0.3 - 0.05);
@@ -53,6 +58,13 @@ test('impact: $200 in a $10k pool costs 4% plus 1% fees', () => {
 
 test('horizon still running is open, not priced', () => {
   assert.equal(label([c(0, 1, 1.3, 1, 1.3)], { ...opts, dataEnd: T0 + 600 }).kind, 'open');
+});
+
+test('horizon past the candle fetch is open even when the DB runs later', () => {
+  const list = [c(0, 1, 1.05, 0.95, 1), c(20, 1, 1.05, 0.95, 1.02)];
+  const e = { pool: 'P', ts: T0, liquidity: 1e9 };
+  priceEvents([e], T0 + 7 * 3600, () => ({ pool: 'P', fetchedAt: T0 + 30 * 60, list }));
+  assert.equal(e.labels.a1h.kind, 'open'); // was drift when only the DB end was checked
 });
 
 test('twelve scans of a mint in one hour make one event', () => {

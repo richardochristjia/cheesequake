@@ -14,6 +14,7 @@ const CACHE = 'data/ohlcv';
 const FEES = 0.01; // round trip
 const TRADE_USD = 200;
 const DEAD_GAP_S = 2 * 3600;
+const ENTRY_MAX_DELAY_S = 600; // no candle within 10 min of the scan: the scan price is not tradable, so do not price it
 const CANDLE_LIMIT = 1000;
 const GECKO_GAP_MS = 7000; // the free OHLCV endpoint answers about 10 calls a minute; 3s pacing mostly gets 429s
 export const LABEL_SETS = [
@@ -30,7 +31,7 @@ export function label(candles, { scanTs, liquidity, up, dn, h, dataEnd = Infinit
   const end = scanTs + h * 3600;
   if (end > dataEnd) return { kind: 'open' };
   const win = candles.filter((c) => c[0] >= scanTs && c[0] < end);
-  if (!win.length || !(liquidity > 0) || !(win[0][1] > 0)) return { kind: 'unpriced' };
+  if (!win.length || win[0][0] > scanTs + ENTRY_MAX_DELAY_S || !(liquidity > 0) || !(win[0][1] > 0)) return { kind: 'unpriced' };
   const entry = win[0][1];
   const cost = FEES + (2 * TRADE_USD) / liquidity;
   let first = null;
@@ -226,15 +227,15 @@ function fetchOrder(events, controls) {
 
 // ---------- pricing ----------
 
-function priceEvents(events, dataEnd) {
+export function priceEvents(events, dataEnd, read = readCache) {
   const unpriced = Object.fromEntries(LABEL_SETS.map((s) => [s.id, 0]));
   const open = { ...unpriced };
   for (const e of events) {
-    const cache = readCache(e.pool);
+    const cache = read(e.pool);
     e.labels = {};
     for (const s of LABEL_SETS) {
       const truncated = cache && cache.list.length >= CANDLE_LIMIT && e.ts < cache.list[0][0]; // history cut off before the scan
-      const l = !cache || truncated ? { kind: 'unpriced' } : label(cache.list, { scanTs: e.ts, liquidity: e.liquidity, ...s, dataEnd });
+      const l = !cache || truncated ? { kind: 'unpriced' } : label(cache.list, { scanTs: e.ts, liquidity: e.liquidity, ...s, dataEnd: Math.min(dataEnd, cache.fetchedAt) }); // candles after the fetch are unknown, not absent
       e.labels[s.id] = l;
       if (l.kind === 'unpriced') unpriced[s.id]++;
       if (l.kind === 'open') open[s.id]++;
